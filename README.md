@@ -1,4 +1,27 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Training Management System
+
+A centralized platform for managing training operations, connecting trainers, operations, and accounts departments, streamlining workflows and improving coordination.
+
+## Features
+
+- **User Roles:** The system supports multiple user roles: Operations, Accounts, Trainer, and Trainee. Each role has specific functionalities and access levels.
+
+- **Operations Dashboard:** Operations staff can add new trainers, create batches and training sessions, manage user accounts, and oversee system settings.
+
+- **Trainer Assignments:** Operations can assign trainers to batches, and trainers can accept or reject assignments.
+
+- **Purchase Order Management:** Track purchase orders from clients, with seamless handoff to accounts department for invoicing.
+
+- **Accounts Management:** Generate and track invoices related to training sessions.
+
+- **Trainee Management:** Track trainees enrolled in courses and their progress.
+
+## Technologies Used
+
+- Frontend: Next.js, Tailwind CSS, TypeScript
+- Backend: Next.js API Routes, Prisma ORM
+- Database: SQLite (can be easily switched to PostgreSQL, MySQL, etc.)
+- Authentication: NextAuth.js with JWT
 
 ## Getting Started
 
@@ -6,31 +29,21 @@ First, run the development server:
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
 Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Default Admin Credentials
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+- Email: admin@example.com
+- Password: admin123
 
-## Learn More
+## Additional Users
 
-To learn more about Next.js, take a look at the following resources:
+- **Trainer:**
+  - Email: trainer@example.com
+  - Password: password123
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- **Accounts:**
+  - Email: accounts@example.com
+  - Password: password123
