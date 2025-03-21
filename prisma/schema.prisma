@@ -1,0 +1,194 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// User model for authentication and role-based access
+model User {
+  id            String    @id @default(cuid())
+  name          String
+  email         String    @unique
+  password      String
+  role          UserRole  @default(TRAINEE)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  
+  // Relations
+  trainerProfile    Trainer?
+  accountsProfile   Accounts?
+  operationsProfile Operations?
+  trainingBatches   TrainingBatch[]   @relation("TraineeToTrainingBatch")
+  feedbacks         Feedback[]
+}
+
+enum UserRole {
+  TRAINER
+  OPERATIONS
+  ACCOUNTS
+  TRAINEE
+}
+
+// Trainer profile
+model Trainer {
+  id            String    @id @default(cuid())
+  userId        String    @unique
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  specialization String
+  availability   Boolean   @default(true)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  
+  // Relations
+  trainingAssignments TrainingAssignment[]
+}
+
+// Operations department profile
+model Operations {
+  id            String    @id @default(cuid())
+  userId        String    @unique
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  department    String
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  
+  // Relations
+  trainingBatches    TrainingBatch[]
+  purchaseOrders     PurchaseOrder[]
+}
+
+// Accounts department profile
+model Accounts {
+  id            String    @id @default(cuid())
+  userId        String    @unique
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  department    String
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  
+  // Relations
+  invoices      Invoice[]
+}
+
+// Training Batch model
+model TrainingBatch {
+  id            String    @id @default(cuid())
+  batchName     String
+  startDate     DateTime
+  endDate       DateTime
+  trainingType  TrainingType
+  createdById   String
+  createdBy     Operations @relation(fields: [createdById], references: [id])
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  
+  // Relations
+  trainees      User[]    @relation("TraineeToTrainingBatch")
+  assignments   TrainingAssignment[]
+  materials     TrainingMaterial[]
+}
+
+enum TrainingType {
+  ONLINE
+  OFFLINE
+}
+
+// Training Assignment model (links trainers to batches)
+model TrainingAssignment {
+  id            String    @id @default(cuid())
+  trainerId     String
+  trainer       Trainer   @relation(fields: [trainerId], references: [id])
+  batchId       String
+  batch         TrainingBatch @relation(fields: [batchId], references: [id])
+  assignedDate  DateTime  @default(now())
+  status        AssignmentStatus @default(PENDING)
+  meetingLink   String?
+  venue         String?
+  accommodation String?
+  travel        String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
+
+enum AssignmentStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+  COMPLETED
+}
+
+// Training Material model
+model TrainingMaterial {
+  id            String    @id @default(cuid())
+  title         String
+  description   String
+  fileUrl       String
+  batchId       String
+  batch         TrainingBatch @relation(fields: [batchId], references: [id])
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
+
+// Purchase Order model
+model PurchaseOrder {
+  id            String    @id @default(cuid())
+  poNumber      String    @unique
+  clientName    String
+  amount        Float
+  fileUrl       String?
+  status        POStatus  @default(PENDING)
+  uploadedById  String
+  uploadedBy    Operations @relation(fields: [uploadedById], references: [id])
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  
+  // Relations
+  invoices      Invoice[]
+}
+
+enum POStatus {
+  PENDING
+  PROCESSED
+  INVOICED
+}
+
+// Invoice model
+model Invoice {
+  id            String    @id @default(cuid())
+  invoiceNumber String    @unique
+  amount        Float
+  fileUrl       String?
+  status        InvoiceStatus @default(PENDING)
+  purchaseOrderId String
+  purchaseOrder PurchaseOrder @relation(fields: [purchaseOrderId], references: [id])
+  generatedById String
+  generatedBy   Accounts  @relation(fields: [generatedById], references: [id])
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
+
+enum InvoiceStatus {
+  PENDING
+  PAID
+  OVERDUE
+}
+
+// Feedback model
+model Feedback {
+  id            String    @id @default(cuid())
+  content       String
+  rating        Int
+  userId        String
+  user          User      @relation(fields: [userId], references: [id])
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
