@@ -85,6 +85,8 @@ model TrainingBatch {
   batchName     String
   startDate     DateTime
   endDate       DateTime
+  startTime     DateTime?
+  endTime       DateTime?
   trainingType  TrainingType
   createdById   String
   createdBy     Operations @relation(fields: [createdById], references: [id])

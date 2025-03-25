@@ -18,6 +18,8 @@ interface Batch {
   batchName: string;
   startDate: Date;
   endDate: Date;
+  startTime?: Date;
+  endTime?: Date;
   trainingType: "ONLINE" | "OFFLINE";
 }
 
@@ -63,6 +65,8 @@ export default function AssignTrainerPage() {
         batchName: "Web Development Fundamentals",
         startDate: new Date(2025, 3, 1),
         endDate: new Date(2025, 3, 30),
+        startTime: new Date(new Date().setHours(9, 0, 0, 0)),
+        endTime: new Date(new Date().setHours(17, 0, 0, 0)),
         trainingType: "ONLINE",
       };
 
@@ -121,6 +125,16 @@ export default function AssignTrainerPage() {
       year: "numeric",
       month: "short",
       day: "numeric"
+    });
+  };
+
+  // Format time for display
+  const formatTime = (time?: Date) => {
+    if (!time) return "";
+    return new Date(time).toLocaleTimeString('en-US', { 
+      hour: 'numeric', 
+      minute: '2-digit',
+      hour12: true 
     });
   };
 
@@ -188,6 +202,11 @@ export default function AssignTrainerPage() {
             <p className="font-medium">
               {formatDate(batch.startDate)} - {formatDate(batch.endDate)}
             </p>
+            {batch.startTime && batch.endTime && (
+              <p className="text-sm text-gray-500">
+                Class Hours: {formatTime(batch.startTime)} - {formatTime(batch.endTime)}
+              </p>
+            )}
           </div>
           <div>
             <p className="text-sm text-gray-500">Training Type</p>

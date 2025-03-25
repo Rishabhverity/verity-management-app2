@@ -20,9 +20,13 @@ interface Batch {
   batchName: string;
   startDate: Date;
   endDate: Date;
+  startTime?: Date;
+  endTime?: Date;
   trainingType: TrainingType;
   status: BatchStatus;
   traineeCount: number;
+  trainerId?: string;
+  trainerName?: string;
   trainees?: Trainee[];
 }
 
@@ -90,7 +94,10 @@ export default function BatchesPage() {
             ? {
                 ...batch,
                 ...data,
-                status: getStatus(data.startDate, data.endDate)
+                status: getStatus(data.startDate, data.endDate),
+                trainerId: data.trainerId || null,
+                startTime: data.startTime || null,
+                endTime: data.endTime || null,
               } 
             : batch
         ));
@@ -100,7 +107,10 @@ export default function BatchesPage() {
           id: `${batches.length + 1}`,
           ...data,
           status: getStatus(data.startDate, data.endDate),
-          traineeCount: data.trainees?.length || 0
+          traineeCount: data.trainees?.length || 0,
+          trainerId: data.trainerId || null,
+          startTime: data.startTime || null,
+          endTime: data.endTime || null,
         };
         setBatches([newBatch, ...batches]);
       }
@@ -148,6 +158,16 @@ export default function BatchesPage() {
     });
   };
 
+  // Format time for display
+  const formatTime = (time: Date) => {
+    if (!time) return "";
+    return new Date(time).toLocaleTimeString('en-US', { 
+      hour: 'numeric', 
+      minute: '2-digit',
+      hour12: true 
+    });
+  };
+
   // Render loading state
   if (status === "loading") {
     return (
@@ -192,7 +212,10 @@ export default function BatchesPage() {
               batchName: editingBatch.batchName,
               startDate: editingBatch.startDate,
               endDate: editingBatch.endDate,
+              startTime: editingBatch.startTime || new Date(new Date().setHours(9, 0, 0, 0)),
+              endTime: editingBatch.endTime || new Date(new Date().setHours(17, 0, 0, 0)),
               trainingType: editingBatch.trainingType,
+              trainerId: editingBatch.trainerId || "",
             } : undefined}
             onSubmit={handleSubmitBatch}
             onCancel={() => {
@@ -251,91 +274,113 @@ export default function BatchesPage() {
         </div>
       </div>
 
-      {/* Batches table */}
-      <div className="bg-white shadow-md rounded-lg overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Batch Name
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Duration
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Type
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Status
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Trainees
-                </th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Actions
-                </th>
+      {/* Batch table */}
+      <div className="bg-white shadow-md rounded-lg overflow-hidden border border-gray-200">
+        <table className="min-w-full divide-y divide-gray-200">
+          <thead className="bg-gray-50">
+            <tr>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
+                Batch Name
+              </th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
+                Duration
+              </th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
+                Type
+              </th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
+                Status
+              </th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
+                Trainees
+              </th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
+                Trainer
+              </th>
+              <th className="px-6 py-3 text-right text-xs font-medium text-gray-700 uppercase tracking-wider">
+                Actions
+              </th>
+            </tr>
+          </thead>
+          <tbody className="bg-white divide-y divide-gray-200">
+            {filteredBatches.map((batch) => (
+              <tr key={batch.id} className="hover:bg-gray-50">
+                <td className="px-6 py-4 whitespace-nowrap">
+                  <div className="text-sm font-medium text-gray-900">
+                    {batch.batchName}
+                  </div>
+                </td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
+                  {formatDate(batch.startDate)} - {formatDate(batch.endDate)}
+                  {batch.startTime && batch.endTime && (
+                    <div className="text-xs text-gray-500 mt-1">
+                      Class time: {formatTime(batch.startTime)} - {formatTime(batch.endTime)}
+                    </div>
+                  )}
+                </td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
+                  {batch.trainingType}
+                </td>
+                <td className="px-6 py-4 whitespace-nowrap">
+                  <span
+                    className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full 
+                      ${
+                        batch.status === "UPCOMING"
+                          ? "bg-blue-100 text-blue-800"
+                          : batch.status === "ONGOING"
+                          ? "bg-green-100 text-green-800"
+                          : "bg-gray-100 text-gray-800"
+                      }`}
+                  >
+                    {batch.status}
+                  </span>
+                </td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
+                  {batch.traineeCount}
+                </td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
+                  {batch.trainerName || (batch.trainerId ? "Assigned" : "Not Assigned")}
+                </td>
+                <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                  <div className="flex justify-end space-x-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleEditBatch(batch)}
+                    >
+                      Edit
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => router.push(`/batches/${batch.id}/assign`)}
+                    >
+                      Assign Trainer
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="text-red-600"
+                      onClick={() => handleDeleteBatch(batch.id)}
+                    >
+                      Delete
+                    </Button>
+                  </div>
+                </td>
               </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
-              {filteredBatches.length === 0 ? (
-                <tr>
-                  <td colSpan={6} className="px-6 py-4 text-center text-sm text-gray-500">
-                    No batches found
-                  </td>
-                </tr>
-              ) : (
-                filteredBatches.map((batch) => (
-                  <tr key={batch.id}>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                      {batch.batchName}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {formatDate(batch.startDate)} - {formatDate(batch.endDate)}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {batch.trainingType === "ONLINE" ? "Online" : "Offline"}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                        batch.status === "UPCOMING" ? "bg-yellow-100 text-yellow-800" :
-                        batch.status === "ONGOING" ? "bg-green-100 text-green-800" :
-                        "bg-gray-100 text-gray-800"
-                      }`}>
-                        {batch.status}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {batch.traineeCount}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                      <div className="flex justify-end space-x-2">
-                        <button
-                          onClick={() => handleEditBatch(batch)}
-                          className="text-blue-600 hover:text-blue-900"
-                        >
-                          Edit
-                        </button>
-                        <button
-                          onClick={() => handleDeleteBatch(batch.id)}
-                          className="text-red-600 hover:text-red-900"
-                        >
-                          Delete
-                        </button>
-                        <button
-                          onClick={() => router.push(`/batches/${batch.id}/assign`)}
-                          className="text-green-600 hover:text-green-900"
-                        >
-                          Assign Trainer
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
+            ))}
+            {filteredBatches.length === 0 && (
+              <tr>
+                <td
+                  colSpan={7}
+                  className="px-6 py-10 text-center text-sm text-gray-700"
+                >
+                  No batches found for the selected filter
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
       </div>
     </div>
   );
