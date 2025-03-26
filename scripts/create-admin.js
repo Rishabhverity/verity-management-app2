@@ -1,30 +1,44 @@
-const { PrismaClient, UserRole } = require('@prisma/client');
-const bcrypt = require('bcrypt');
+const { PrismaClient } = require('@prisma/client');
+const { hash } = require('bcrypt');
 
 const prisma = new PrismaClient();
 
 async function main() {
   try {
-    const password = await bcrypt.hash('admin123', 10);
-
-    // Create admin user
-    const admin = await prisma.user.upsert({
-      where: { email: 'admin@example.com' },
-      update: {},
-      create: {
-        email: 'admin@example.com',
+    const hashedPassword = await hash('admin123', 10);
+    
+    // First, try to delete any existing admin user
+    await prisma.user.deleteMany({
+      where: { email: 'admin@example.com' }
+    });
+    
+    // Create operations user with OPERATIONS role
+    const operationsUser = await prisma.user.create({
+      data: {
         name: 'Admin User',
-        password,
-        role: UserRole.OPERATIONS,
-        operationsProfile: {
-          create: {
-            department: 'Operations Department',
-          },
-        },
+        email: 'admin@example.com',
+        password: hashedPassword,
+        role: 'OPERATIONS',
+        createdAt: new Date(),
+        updatedAt: new Date(),
       },
     });
 
-    console.log('Admin user created:', admin);
+    // Create operations profile
+    await prisma.operations.create({
+      data: {
+        userId: operationsUser.id,
+        department: 'Operations',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+    });
+
+    console.log('Admin user created successfully:');
+    console.log(`Email: admin@example.com`);
+    console.log(`Password: admin123`);
+    console.log(`Role: OPERATIONS`);
+    
   } catch (error) {
     console.error('Error creating admin user:', error);
   } finally {
@@ -32,4 +46,7 @@ async function main() {
   }
 }
 
-main(); 
+main().catch((error) => {
+  console.error(error);
+  process.exit(1);
+}); 
