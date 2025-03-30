@@ -28,6 +28,7 @@ interface Batch {
   trainerId?: string;
   trainerName?: string;
   trainees?: Trainee[];
+  meetingLink?: string;
 }
 
 export default function BatchesPage() {
@@ -44,52 +45,98 @@ export default function BatchesPage() {
   // Check if user can view and manage batches
   const canViewBatches = session?.user?.role === "OPERATIONS";
 
-  // Mock data initialization
+  // Initialize from localStorage or use mock data
   useEffect(() => {
     if (status === "authenticated" && canViewBatches) {
-      // In a real app, fetch batches from API
-      const mockBatches: Batch[] = [
-        {
-          id: "1",
-          batchName: "Web Development Fundamentals",
-          startDate: new Date(2025, 3, 1),
-          endDate: new Date(2025, 3, 30),
-          trainingType: "ONLINE",
-          status: "UPCOMING",
-          traineeCount: 15
-        },
-        {
-          id: "2",
-          batchName: "Data Science Bootcamp",
-          startDate: new Date(2025, 2, 15),
-          endDate: new Date(2025, 5, 15),
-          trainingType: "OFFLINE",
-          status: "ONGOING",
-          traineeCount: 12
-        },
-        {
-          id: "3",
-          batchName: "AI Fundamentals",
-          startDate: new Date(2025, 1, 10),
-          endDate: new Date(2025, 2, 10),
-          trainingType: "ONLINE",
-          status: "COMPLETED",
-          traineeCount: 20
+      // Try to get batches from localStorage
+      const storedBatches = localStorage.getItem('verity-batches');
+      
+      if (storedBatches) {
+        try {
+          // Parse the dates properly
+          const parsedBatches = JSON.parse(storedBatches, (key, value) => {
+            // Convert date strings back to Date objects
+            if (key === 'startDate' || key === 'endDate' || key === 'startTime' || key === 'endTime') {
+              return value ? new Date(value) : null;
+            }
+            return value;
+          });
+          setBatches(parsedBatches);
+        } catch (error) {
+          console.error('Error parsing stored batches:', error);
+          // Fall back to mock data
+          setDefaultBatches();
         }
-      ];
-      setBatches(mockBatches);
+      } else {
+        // No stored batches, use default mock data
+        setDefaultBatches();
+      }
     }
   }, [status, canViewBatches]);
 
+  // Helper to set default mock batches
+  const setDefaultBatches = () => {
+    // In a real app, fetch batches from API
+    const mockBatches: Batch[] = [
+      {
+        id: "1",
+        batchName: "Web Development Fundamentals",
+        startDate: new Date(2025, 3, 1),
+        endDate: new Date(2025, 3, 30),
+        trainingType: "ONLINE",
+        status: "UPCOMING",
+        traineeCount: 15
+      },
+      {
+        id: "2",
+        batchName: "Data Science Bootcamp",
+        startDate: new Date(2025, 2, 15),
+        endDate: new Date(2025, 5, 15),
+        trainingType: "OFFLINE",
+        status: "ONGOING",
+        traineeCount: 12
+      },
+      {
+        id: "3",
+        batchName: "AI Fundamentals",
+        startDate: new Date(2025, 1, 10),
+        endDate: new Date(2025, 2, 10),
+        trainingType: "ONLINE",
+        status: "COMPLETED",
+        traineeCount: 20
+      }
+    ];
+    setBatches(mockBatches);
+    // Store in localStorage
+    saveBatchesToStorage(mockBatches);
+  };
+
+  // Save batches to localStorage
+  const saveBatchesToStorage = (batchesToSave: Batch[]) => {
+    try {
+      localStorage.setItem('verity-batches', JSON.stringify(batchesToSave));
+    } catch (error) {
+      console.error('Error saving batches to localStorage:', error);
+    }
+  };
+
   // Handle creating or updating a batch
-  const handleSubmitBatch = (data: any) => {
+  const handleSubmitBatch = async (data: any) => {
     setIsLoading(true);
 
-    // Simulate API call
-    setTimeout(() => {
+    try {
+      // Convert the data to match the API expectations
+      const batchData = {
+        ...data,
+        status: getStatus(data.startDate, data.endDate),
+        traineeCount: data.trainees?.length || 0,
+      };
+
+      let updatedBatches;
+
       if (editingBatch) {
         // Update existing batch
-        setBatches(batches.map(batch => 
+        updatedBatches = batches.map(batch => 
           batch.id === editingBatch.id 
             ? {
                 ...batch,
@@ -98,28 +145,38 @@ export default function BatchesPage() {
                 trainerId: data.trainerId || null,
                 startTime: data.startTime || null,
                 endTime: data.endTime || null,
+                meetingLink: data.meetingLink || null,
               } 
             : batch
-        ));
+        );
       } else {
         // Create new batch
         const newBatch: Batch = {
-          id: `${batches.length + 1}`,
+          id: `${Date.now()}`, // Use timestamp for unique ID
           ...data,
           status: getStatus(data.startDate, data.endDate),
           traineeCount: data.trainees?.length || 0,
           trainerId: data.trainerId || null,
           startTime: data.startTime || null,
           endTime: data.endTime || null,
+          meetingLink: data.meetingLink || null,
         };
-        setBatches([newBatch, ...batches]);
+        updatedBatches = [newBatch, ...batches];
       }
 
+      // Update state and localStorage
+      setBatches(updatedBatches);
+      saveBatchesToStorage(updatedBatches);
+
       // Reset form state
-      setIsLoading(false);
       setIsFormOpen(false);
       setEditingBatch(null);
-    }, 1000);
+    } catch (error) {
+      console.error("Error saving batch:", error);
+      // Show error to user
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   // Helper to determine batch status based on dates
@@ -144,8 +201,9 @@ export default function BatchesPage() {
   // Handle deleting a batch
   const handleDeleteBatch = (batchId: string) => {
     if (window.confirm("Are you sure you want to delete this batch?")) {
-      // In a real app, make API call to delete
-      setBatches(batches.filter(batch => batch.id !== batchId));
+      const updatedBatches = batches.filter(batch => batch.id !== batchId);
+      setBatches(updatedBatches);
+      saveBatchesToStorage(updatedBatches);
     }
   };
 
@@ -216,6 +274,7 @@ export default function BatchesPage() {
               endTime: editingBatch.endTime || new Date(new Date().setHours(17, 0, 0, 0)),
               trainingType: editingBatch.trainingType,
               trainerId: editingBatch.trainerId || "",
+              meetingLink: editingBatch.meetingLink || "",
             } : undefined}
             onSubmit={handleSubmitBatch}
             onCancel={() => {
@@ -320,6 +379,13 @@ export default function BatchesPage() {
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
                   {batch.trainingType}
+                  {batch.trainingType === "ONLINE" && batch.meetingLink && (
+                    <div className="text-xs text-blue-600 mt-1">
+                      <a href={batch.meetingLink} target="_blank" rel="noopener noreferrer">
+                        Meeting Link
+                      </a>
+                    </div>
+                  )}
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap">
                   <span
@@ -349,13 +415,6 @@ export default function BatchesPage() {
                       onClick={() => handleEditBatch(batch)}
                     >
                       Edit
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => router.push(`/batches/${batch.id}/assign`)}
-                    >
-                      Assign Trainer
                     </Button>
                     <Button
                       variant="outline"

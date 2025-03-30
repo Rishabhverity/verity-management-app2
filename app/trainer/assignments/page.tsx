@@ -55,6 +55,7 @@ export default function TrainerAssignmentsPage() {
   const router = useRouter();
   const [assignments, setAssignments] = useState(MOCK_ASSIGNMENTS);
   const [filter, setFilter] = useState<AssignmentStatus | "ALL">("ALL");
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     if (status === "unauthenticated") {
@@ -64,6 +65,71 @@ export default function TrainerAssignmentsPage() {
 
   // Check if user is a trainer
   const isTrainer = session?.user?.role === "TRAINER";
+
+  // Fetch assigned batches when the component mounts
+  useEffect(() => {
+    function getAssignedBatches() {
+      if (status === "authenticated" && isTrainer) {
+        setLoading(true);
+        try {
+          // Get batches from localStorage instead of API
+          const storedBatches = localStorage.getItem('verity-batches');
+          
+          if (storedBatches) {
+            // Parse the JSON string
+            const parsedBatches = JSON.parse(storedBatches, (key, value) => {
+              // Convert date strings back to Date objects
+              if (key === 'startDate' || key === 'endDate' || key === 'startTime' || key === 'endTime') {
+                return value ? new Date(value) : null;
+              }
+              return value;
+            });
+            
+            // For demo purposes, filter batches where trainerId matches "trainer-demo" 
+            // OR where trainerId equals the session user id (if available)
+            const trainerBatches = parsedBatches.filter(
+              (batch: any) => 
+                batch.trainerId === "trainer-demo" || 
+                (session.user.id && batch.trainerId === session.user.id)
+            );
+
+            // Convert batches to assignment format
+            const trainerAssignments = trainerBatches.map((batch: any) => ({
+              id: batch.id,
+              batchName: batch.batchName,
+              startDate: new Date(batch.startDate),
+              endDate: new Date(batch.endDate),
+              trainingType: batch.trainingType,
+              meetingLink: batch.meetingLink || null,
+              venue: batch.venue || null,
+              accommodation: batch.accommodation || null,
+              travel: batch.travel || null,
+              status: batch.assignmentStatus || "PENDING",
+              traineeCount: batch.traineeCount || 0
+            }));
+
+            if (trainerAssignments.length > 0) {
+              setAssignments(trainerAssignments);
+            } else {
+              // No assignments found in localStorage, use mock data
+              setAssignments(MOCK_ASSIGNMENTS);
+            }
+          } else {
+            // No batches in localStorage, use mock data
+            setAssignments(MOCK_ASSIGNMENTS);
+          }
+        } catch (error) {
+          console.error("Error fetching assigned batches:", error);
+          // Fall back to mock data on error
+          setAssignments(MOCK_ASSIGNMENTS);
+        } finally {
+          setLoading(false);
+        }
+      }
+    }
+
+    getAssignedBatches();
+  }, [status, isTrainer, session]);
 
   const handleStatusChange = (assignmentId: string, newStatus: AssignmentStatus) => {
     setAssignments((prev) =>
@@ -80,7 +146,7 @@ export default function TrainerAssignmentsPage() {
       ? assignments
       : assignments.filter((assignment) => assignment.status === filter);
 
-  if (status === "loading") {
+  if (status === "loading" || loading) {
     return (
       <div className="flex justify-center items-center min-h-[50vh] bg-white">
         <div className="text-xl text-gray-700">Loading...</div>
@@ -147,7 +213,15 @@ export default function TrainerAssignmentsPage() {
 
       {filteredAssignments.length === 0 ? (
         <div className="bg-white shadow-md rounded-lg p-6 text-center">
-          <p className="text-gray-700">No assignments found</p>
+          <p className="text-gray-700 mb-4">No assignments found for the selected filter.</p>
+          {filter !== "ALL" ? (
+            <Button onClick={() => setFilter("ALL")}>Show All Assignments</Button>
+          ) : (
+            <div className="text-gray-700 mt-4">
+              <p>You don't have any assigned batches yet.</p>
+              <p className="mt-2">Check back later or contact the operations team if you believe this is an error.</p>
+            </div>
+          )}
         </div>
       ) : (
         <div className="space-y-6">

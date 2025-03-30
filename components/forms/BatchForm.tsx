@@ -9,6 +9,7 @@ import "react-datepicker/dist/react-datepicker.css";
 import { Button } from "@/components/ui/button";
 import { TrainingType } from "@prisma/client";
 import axios from "axios";
+import TraineeList from "./TraineeList";
 
 // Define trainer type
 interface Trainer {
@@ -19,6 +20,24 @@ interface Trainer {
   availability: boolean;
 }
 
+// Mock trainers for demo
+const MOCK_TRAINERS = [
+  {
+    id: "trainer-demo",
+    name: "Demo Trainer",
+    email: "trainer@example.com",
+    specialization: "Web Development",
+    availability: true
+  },
+  {
+    id: "trainer-2",
+    name: "Jane Smith",
+    email: "jane@example.com", 
+    specialization: "Data Science",
+    availability: true
+  }
+];
+
 // Define form validation schema
 const batchFormSchema = z.object({
   batchName: z.string().min(3, { message: "Batch name must be at least 3 characters" }),
@@ -27,6 +46,7 @@ const batchFormSchema = z.object({
   startTime: z.date({ required_error: "Start time is required" }),
   endTime: z.date({ required_error: "End time is required" }),
   trainingType: z.enum(["ONLINE", "OFFLINE"], { required_error: "Training type is required" }),
+  meetingLink: z.string().url({ message: "Please enter a valid URL" }).optional().or(z.literal("")),
   trainerId: z.string().optional(),
   trainees: z.array(z.string()).optional(),
 });
@@ -92,10 +112,21 @@ export default function BatchForm({
       
       try {
         const response = await axios.get('/api/trainers');
-        setTrainers(response.data);
+        // Add the demo trainer to ensure it's always available
+        const fetchedTrainers = response.data;
+        const hasDemo = fetchedTrainers.some((t: Trainer) => t.id === 'trainer-demo');
+        
+        if (!hasDemo) {
+          // Add the demo trainer if it doesn't exist
+          setTrainers([...fetchedTrainers, MOCK_TRAINERS[0]]);
+        } else {
+          setTrainers(fetchedTrainers);
+        }
       } catch (error) {
         console.error("Error fetching trainers:", error);
-        setTrainerError("Failed to load trainers. Please try again.");
+        setTrainerError("Failed to load trainers. Using default trainers.");
+        // Fall back to mock trainers
+        setTrainers(MOCK_TRAINERS);
       } finally {
         setIsLoadingTrainers(false);
       }
@@ -104,13 +135,8 @@ export default function BatchForm({
     fetchTrainers();
   }, []);
 
-  // Dummy data for trainees select - in a real app, fetch from API
-  const [trainees, setTrainees] = useState([
-    { id: "1", name: "John Doe" },
-    { id: "2", name: "Jane Smith" },
-    { id: "3", name: "Robert Johnson" },
-    { id: "4", name: "Emily Davis" },
-  ]);
+  // Initialize with empty trainees array instead of dummy data
+  const [trainees, setTrainees] = useState<{id: string, name: string}[]>([]);
 
   const handleFormSubmit = (data: BatchFormValues) => {
     // Ensure end date is not before start date
@@ -124,7 +150,11 @@ export default function BatchForm({
       return;
     }
     
-    onSubmit(data);
+    // Include trainees in submission
+    onSubmit({
+      ...data,
+      trainees: trainees.map(t => t.id)
+    });
   };
 
   // Format time for display
@@ -167,6 +197,26 @@ export default function BatchForm({
             <p className="mt-1 text-sm text-red-600">{errors.trainingType.message}</p>
           )}
         </div>
+
+        {watch("trainingType") === "ONLINE" && (
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Meeting Link (Zoom/Microsoft Teams)
+            </label>
+            <input
+              type="url"
+              {...register("meetingLink")}
+              placeholder="https://zoom.us/j/123456789 or https://teams.microsoft.com/l/meetup-join/..."
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+            />
+            {errors.meetingLink && (
+              <p className="mt-1 text-sm text-red-600">{errors.meetingLink.message}</p>
+            )}
+            <p className="mt-1 text-xs text-gray-500">
+              Paste your Zoom or Microsoft Teams meeting link here
+            </p>
+          </div>
+        )}
 
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -269,41 +319,27 @@ export default function BatchForm({
         <select
           {...register("trainerId")}
           className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-          disabled={isLoadingTrainers}
         >
           <option value="">Select a trainer</option>
           {trainers.map((trainer) => (
-            <option 
-              key={trainer.id} 
-              value={trainer.id}
-              disabled={!trainer.availability}
-            >
-              {trainer.name} - {trainer.specialization} {!trainer.availability && "(Unavailable)"}
+            <option key={trainer.id} value={trainer.id}>
+              {trainer.name} {trainer.id === 'trainer-demo' ? '(Demo)' : ''}
             </option>
           ))}
         </select>
-        {isLoadingTrainers && <p className="mt-1 text-xs text-gray-500">Loading trainers...</p>}
-        {trainerError && <p className="mt-1 text-sm text-red-600">{trainerError}</p>}
+        {trainerError && (
+          <p className="mt-1 text-sm text-red-600">{trainerError}</p>
+        )}
+        {isLoadingTrainers && (
+          <p className="mt-1 text-sm text-gray-500">Loading trainers...</p>
+        )}
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">
-          Trainees
-        </label>
-        <select
-          multiple
-          {...register("trainees")}
-          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 h-32"
-        >
-          {trainees.map((trainee) => (
-            <option key={trainee.id} value={trainee.id}>
-              {trainee.name}
-            </option>
-          ))}
-        </select>
-        <p className="mt-1 text-xs text-gray-500">
-          Hold Ctrl/Cmd to select multiple trainees
-        </p>
+        <TraineeList
+          trainees={trainees}
+          onTraineesChange={setTrainees}
+        />
       </div>
 
       <div className="flex justify-end space-x-3 mt-6">
