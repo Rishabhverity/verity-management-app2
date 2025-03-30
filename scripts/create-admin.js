@@ -12,13 +12,13 @@ async function main() {
       where: { email: 'admin@example.com' }
     });
     
-    // Create operations user with OPERATIONS role
-    const operationsUser = await prisma.user.create({
+    // Create admin user with ADMIN role
+    const adminUser = await prisma.user.create({
       data: {
         name: 'Admin User',
         email: 'admin@example.com',
         password: hashedPassword,
-        role: 'OPERATIONS',
+        role: 'ADMIN',
         createdAt: new Date(),
         updatedAt: new Date(),
       },
@@ -27,7 +27,7 @@ async function main() {
     // Create operations profile
     await prisma.operations.create({
       data: {
-        userId: operationsUser.id,
+        userId: adminUser.id,
         department: 'Operations',
         createdAt: new Date(),
         updatedAt: new Date(),
@@ -37,7 +37,7 @@ async function main() {
     console.log('Admin user created successfully:');
     console.log(`Email: admin@example.com`);
     console.log(`Password: admin123`);
-    console.log(`Role: OPERATIONS`);
+    console.log(`Role: ADMIN`);
     
   } catch (error) {
     console.error('Error creating admin user:', error);

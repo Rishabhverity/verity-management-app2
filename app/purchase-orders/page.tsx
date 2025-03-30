@@ -6,9 +6,19 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { POStatus, UserRole } from "@prisma/client";
 
-// Mock data for sample purchase orders 
-// In a real app, this would come from an API call
-const MOCK_PURCHASE_ORDERS = [
+// Define the PurchaseOrder type
+type PurchaseOrder = {
+  id: string;
+  poNumber: string;
+  clientName: string;
+  amount: number;
+  status: POStatus;
+  uploadedAt: string;
+  fileUrl: string | null;
+};
+
+// Default mock data for initial setup if no POs in localStorage
+const DEFAULT_PURCHASE_ORDERS: PurchaseOrder[] = [
   {
     id: "1",
     poNumber: "PO-2023-001",
@@ -41,9 +51,9 @@ const MOCK_PURCHASE_ORDERS = [
 export default function PurchaseOrdersPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
-  const [purchaseOrders, setPurchaseOrders] = useState(MOCK_PURCHASE_ORDERS);
+  const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>([]);
   const [isFormOpen, setIsFormOpen] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [formData, setFormData] = useState({
     poNumber: "",
@@ -57,10 +67,33 @@ export default function PurchaseOrdersPage() {
     }
   }, [status, router]);
 
-  // Check if user has permissions to upload POs
-  const canUploadPO = session?.user?.role === "OPERATIONS";
+  // Load purchase orders from localStorage on component mount
+  useEffect(() => {
+    if (status === "authenticated") {
+      try {
+        const storedPOs = localStorage.getItem('verity-purchase-orders');
+        
+        if (storedPOs) {
+          setPurchaseOrders(JSON.parse(storedPOs));
+        } else {
+          // Initialize with default data if no POs in localStorage
+          localStorage.setItem('verity-purchase-orders', JSON.stringify(DEFAULT_PURCHASE_ORDERS));
+          setPurchaseOrders(DEFAULT_PURCHASE_ORDERS);
+        }
+      } catch (error) {
+        console.error("Error loading purchase orders:", error);
+        setPurchaseOrders(DEFAULT_PURCHASE_ORDERS);
+      } finally {
+        setIsLoading(false);
+      }
+    }
+  }, [status]);
+
+  // Check if user has permission to upload POs
+  const userRole = session?.user?.role ? String(session.user.role).toUpperCase() : "";
+  const canUploadPO = userRole === "OPERATIONS" || userRole === "ADMIN";
   // Check if user can view and/or process POs
-  const canViewPO = ["OPERATIONS", "ACCOUNTS"].includes(session?.user?.role as string);
+  const canViewPO = userRole === "OPERATIONS" || userRole === "ACCOUNTS" || userRole === "ADMIN";
 
   const handleFormChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -77,28 +110,49 @@ export default function PurchaseOrdersPage() {
     e.preventDefault();
     setIsLoading(true);
 
-    // In a real app, here we would upload the file and create the PO in the database
-    setTimeout(() => {
-      // Mock adding a new PO to the list
-      const newPO = {
-        id: (purchaseOrders.length + 1).toString(),
-        poNumber: formData.poNumber,
-        clientName: formData.clientName,
-        amount: parseFloat(formData.amount),
-        status: "PENDING" as POStatus,
-        uploadedAt: new Date().toISOString(),
-        fileUrl: selectedFile ? URL.createObjectURL(selectedFile) : null
-      };
+    // Create a new purchase order
+    const newPO: PurchaseOrder = {
+      id: `po-${Date.now()}`,
+      poNumber: formData.poNumber,
+      clientName: formData.clientName,
+      amount: parseFloat(formData.amount),
+      status: "PENDING" as POStatus,
+      uploadedAt: new Date().toISOString(),
+      fileUrl: selectedFile ? URL.createObjectURL(selectedFile) : null
+    };
 
-      setPurchaseOrders((prev) => [newPO, ...prev]);
-      setIsFormOpen(false);
-      setFormData({ poNumber: "", clientName: "", amount: "" });
-      setSelectedFile(null);
-      setIsLoading(false);
-    }, 1000);
+    // Update state and localStorage
+    const updatedPOs = [newPO, ...purchaseOrders];
+    setPurchaseOrders(updatedPOs);
+    
+    try {
+      localStorage.setItem('verity-purchase-orders', JSON.stringify(updatedPOs));
+    } catch (error) {
+      console.error("Error saving to localStorage:", error);
+    }
+
+    // Reset form
+    setIsFormOpen(false);
+    setFormData({ poNumber: "", clientName: "", amount: "" });
+    setSelectedFile(null);
+    setIsLoading(false);
   };
 
-  if (status === "loading") {
+  const handleProcessPO = (poId: string) => {
+    const updatedPOs = purchaseOrders.map(po => 
+      po.id === poId ? { ...po, status: "PROCESSED" as POStatus } : po
+    );
+    
+    setPurchaseOrders(updatedPOs);
+    
+    try {
+      localStorage.setItem('verity-purchase-orders', JSON.stringify(updatedPOs));
+    } catch (error) {
+      console.error("Error saving to localStorage:", error);
+    }
+  };
+
+  if (status === "loading" || isLoading) {
     return (
       <div className="flex justify-center items-center min-h-[50vh]">
         <div className="text-xl text-gray-500">Loading...</div>
@@ -161,7 +215,7 @@ export default function PurchaseOrdersPage() {
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Amount
+                  Amount (₹)
                 </label>
                 <input
                   type="number"
@@ -204,102 +258,109 @@ export default function PurchaseOrdersPage() {
         </div>
       )}
 
-      <div className="bg-white shadow-md rounded-lg overflow-hidden border border-gray-200">
-        <table className="min-w-full divide-y divide-gray-200">
-          <thead className="bg-gray-50">
-            <tr>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                PO Number
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Client
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Amount
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Status
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Uploaded
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Document
-              </th>
-              {session?.user?.role === "ACCOUNTS" && (
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Actions
+      {purchaseOrders.length === 0 ? (
+        <div className="bg-white p-6 rounded-lg shadow-md text-center">
+          <p className="text-gray-700 mb-2">No purchase orders found.</p>
+          {canUploadPO && (
+            <Button onClick={() => setIsFormOpen(true)}>Upload New PO</Button>
+          )}
+        </div>
+      ) : (
+        <div className="bg-white shadow-md rounded-lg overflow-hidden border border-gray-200">
+          <table className="min-w-full divide-y divide-gray-200">
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  PO Number
                 </th>
-              )}
-            </tr>
-          </thead>
-          <tbody className="bg-white divide-y divide-gray-200">
-            {purchaseOrders.map((po) => (
-              <tr key={po.id} className="hover:bg-gray-50">
-                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                  {po.poNumber}
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                  {po.clientName}
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                  ${po.amount.toFixed(2)}
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full 
-                    ${po.status === "PENDING" ? "bg-yellow-100 text-yellow-800" : 
-                      po.status === "PROCESSED" ? "bg-blue-100 text-blue-800" : 
-                      "bg-green-100 text-green-800"}`}
-                  >
-                    {po.status}
-                  </span>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                  {new Date(po.uploadedAt).toLocaleDateString()}
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                  {po.fileUrl ? (
-                    <a 
-                      href={po.fileUrl} 
-                      target="_blank" 
-                      rel="noreferrer"
-                      className="text-blue-600 hover:text-blue-800"
-                    >
-                      View
-                    </a>
-                  ) : (
-                    "No document"
-                  )}
-                </td>
-                {session?.user?.role === "ACCOUNTS" && (
-                  <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                    {po.status === "PROCESSED" && (
-                      <Button 
-                        variant="outline" 
-                        size="sm" 
-                        className="text-blue-600"
-                        onClick={() => router.push(`/invoices/new?poId=${po.id}`)}
-                      >
-                        Generate Invoice
-                      </Button>
-                    )}
-                  </td>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Client
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Amount
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Status
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Uploaded
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Document
+                </th>
+                {userRole === "ACCOUNTS" && (
+                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Actions
+                  </th>
                 )}
               </tr>
-            ))}
-            {purchaseOrders.length === 0 && (
-              <tr>
-                <td 
-                  colSpan={session?.user?.role === "ACCOUNTS" ? 7 : 6} 
-                  className="px-6 py-10 text-center text-sm text-gray-500"
-                >
-                  No purchase orders found
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+            </thead>
+            <tbody className="bg-white divide-y divide-gray-200">
+              {purchaseOrders.map((po) => (
+                <tr key={po.id} className="hover:bg-gray-50">
+                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                    {po.poNumber}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                    {po.clientName}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                    ₹{po.amount.toFixed(2)}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full 
+                      ${po.status === "PENDING" ? "bg-yellow-100 text-yellow-800" : 
+                        po.status === "PROCESSED" ? "bg-blue-100 text-blue-800" : 
+                        "bg-green-100 text-green-800"}`}
+                    >
+                      {po.status}
+                    </span>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                    {new Date(po.uploadedAt).toLocaleDateString()}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                    {po.fileUrl ? (
+                      <a 
+                        href={po.fileUrl} 
+                        target="_blank" 
+                        rel="noreferrer"
+                        className="text-blue-600 hover:text-blue-800"
+                      >
+                        View
+                      </a>
+                    ) : (
+                      <span className="text-gray-400">No document</span>
+                    )}
+                  </td>
+                  {userRole === "ACCOUNTS" && (
+                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                      {po.status === "PENDING" && (
+                        <Button 
+                          variant="outline" 
+                          size="sm"
+                          onClick={() => handleProcessPO(po.id)}
+                        >
+                          Process
+                        </Button>
+                      )}
+                      {po.status === "PROCESSED" && (
+                        <Button 
+                          variant="outline" 
+                          size="sm"
+                          onClick={() => router.push(`/invoices/new?poId=${po.id}`)}
+                        >
+                          Create Invoice
+                        </Button>
+                      )}
+                    </td>
+                  )}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
-} 
+}

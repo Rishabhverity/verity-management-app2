@@ -51,13 +51,26 @@ export default function DashboardPage() {
   }
 
   const renderRoleBasedContent = () => {
+    // Debug console logs to check the role
+    console.log("User session:", session);
+    console.log("User role:", session?.user?.role);
+    console.log("Is admin check:", session?.user?.role === "ADMIN");
+    
     if (!session?.user?.role) return null;
 
-    switch (session.user.role) {
-      case "OPERATIONS":
+    // Try a case-insensitive comparison
+    const userRole = String(session.user.role).toUpperCase();
+    console.log("User role (uppercase):", userRole);
+    
+    // Check exact role value to help debugging
+    console.log("Role type:", typeof session.user.role);
+    console.log("Role value exact:", JSON.stringify(session.user.role));
+    
+    switch (userRole) {
+      case "ADMIN":
         return (
           <div>
-            <h2 className="text-xl font-semibold text-gray-800 mb-6">Operations Dashboard</h2>
+            <h2 className="text-xl font-semibold text-gray-800 mb-6">Admin Dashboard</h2>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
               <DashboardCard
                 title="Manage Batches"
@@ -72,15 +85,15 @@ export default function DashboardPage() {
                 count={0}
               />
               <DashboardCard
-                title="Purchase Orders"
-                description="Manage purchase orders from clients"
-                link="/purchase-orders"
-                count={0}
-              />
-              <DashboardCard
                 title="User Management"
                 description="Create and manage user accounts"
                 link="/admin/register"
+                count={0}
+              />
+              <DashboardCard
+                title="Purchase Orders"
+                description="Manage purchase orders from clients"
+                link="/purchase-orders"
                 count={0}
               />
             </div>

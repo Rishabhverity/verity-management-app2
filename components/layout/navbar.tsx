@@ -18,11 +18,20 @@ export const Navbar = () => {
     router.push("/login");
   };
 
-  // Navigation items based on user role
-  const roleBasedNavItems = () => {
-    const userRole = session?.user?.role as UserRole;
+  // Function to return appropriate navigation items based on user role
+  function roleBasedNavItems(userRole: string) {
+    // Convert role to uppercase for consistent comparison
+    const role = userRole?.toUpperCase() || "";
     
-    switch (userRole) {
+    switch (role) {
+      case "ADMIN":
+        return [
+          { name: "Dashboard", href: "/dashboard" },
+          { name: "Batches", href: "/batches" },
+          { name: "Trainers", href: "/trainers" },
+          { name: "Users", href: "/admin/users" },
+          { name: "Purchase Orders", href: "/purchase-orders" },
+        ];
       case "OPERATIONS":
         return [
           { name: "Dashboard", href: "/dashboard" },
@@ -30,28 +39,26 @@ export const Navbar = () => {
           { name: "Trainers", href: "/trainers" },
           { name: "Purchase Orders", href: "/purchase-orders" },
         ];
-      case "TRAINER":
-        return [
-          { name: "Dashboard", href: "/dashboard" },
-          { name: "My Assignments", href: "/trainer/assignments" },
-          { name: "Training Materials", href: "/trainer/materials" },
-        ];
       case "ACCOUNTS":
         return [
           { name: "Dashboard", href: "/dashboard" },
-          { name: "Invoices", href: "/invoices" },
           { name: "Purchase Orders", href: "/purchase-orders" },
+          { name: "Invoices", href: "/invoices" },
         ];
-      case "TRAINEE":
+      case "TRAINER":
         return [
           { name: "Dashboard", href: "/dashboard" },
-          { name: "My Courses", href: "/trainee/courses" },
-          { name: "Materials", href: "/trainee/materials" },
+          { name: "Batches", href: "/trainer/batches" },
+          { name: "Assignments", href: "/trainer/assignments" },
+          { name: "Students", href: "/trainer/students" },
+          { name: "Materials", href: "/trainer/materials" },
         ];
       default:
-        return [];
+        return [
+          { name: "Dashboard", href: "/dashboard" },
+        ];
     }
-  };
+  }
 
   return (
     <header className="bg-white shadow-md">
@@ -77,7 +84,7 @@ export const Navbar = () => {
         {/* Desktop navigation */}
         {session?.user && (
           <div className="hidden lg:flex lg:gap-x-6">
-            {roleBasedNavItems().map((item) => (
+            {roleBasedNavItems(session.user.role).map((item) => (
               <Link 
                 key={item.name} 
                 href={item.href}
@@ -136,7 +143,7 @@ export const Navbar = () => {
               <div className="-my-6 divide-y divide-gray-500/10">
                 {session?.user && (
                   <div className="space-y-2 py-6">
-                    {roleBasedNavItems().map((item) => (
+                    {roleBasedNavItems(session.user.role).map((item) => (
                       <Link
                         key={item.name}
                         href={item.href}

@@ -5,24 +5,33 @@ const prisma = new PrismaClient();
 
 async function main() {
   try {
-    // Create a trainer user
-    const hashedPassword = await bcrypt.hash("password123", 10);
-    
+    // Hash the password
+    const hashedPassword = await bcrypt.hash("trainer123", 10);
+
+    // Create the trainer user (or update if exists)
     const trainer = await prisma.user.upsert({
       where: { email: "trainer@example.com" },
-      update: {},
+      update: {
+        password: hashedPassword
+      },
       create: {
-        name: "Test Trainer",
+        id: "trainer-demo", // Use the ID that matches our demo trainer ID
+        name: "Demo Trainer",
         email: "trainer@example.com",
         password: hashedPassword,
-        role: "TRAINER",
-      },
+        role: "TRAINER"
+      }
     });
-    
-    console.log({ trainer });
-    console.log("Trainer created successfully");
+
+    console.log("Trainer user created/updated successfully:");
+    console.log({
+      id: trainer.id,
+      name: trainer.name,
+      email: trainer.email,
+      role: trainer.role
+    });
   } catch (error) {
-    console.error("Error creating trainer:", error);
+    console.error("Error creating trainer user:", error);
   } finally {
     await prisma.$disconnect();
   }

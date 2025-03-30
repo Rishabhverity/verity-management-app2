@@ -5,49 +5,25 @@ import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 
-// Mock data for sample trainers
-// In a real app, this would come from an API call
-const MOCK_TRAINERS = [
-  {
-    id: "1",
-    name: "John Doe",
-    email: "john.doe@example.com",
-    specialization: "Web Development",
-    availability: true,
-    assignedBatches: 1
-  },
-  {
-    id: "2",
-    name: "Jane Smith",
-    email: "jane.smith@example.com",
-    specialization: "Data Science",
-    availability: true,
-    assignedBatches: 1
-  },
-  {
-    id: "3",
-    name: "Robert Johnson",
-    email: "robert.j@example.com",
-    specialization: "Cloud Computing",
-    availability: false,
-    assignedBatches: 2
-  },
-  {
-    id: "4",
-    name: "Emily Chen",
-    email: "emily.chen@example.com",
-    specialization: "Cybersecurity",
-    availability: true,
-    assignedBatches: 0
-  }
-];
+// Define the Trainer type for TypeScript
+type Trainer = {
+  id: string;
+  name: string;
+  email: string;
+  specialization: string;
+  availability: boolean;
+  assignedBatches?: number;
+  createdAt?: string;
+};
 
 export default function TrainersPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
-  const [trainers, setTrainers] = useState(MOCK_TRAINERS);
+  const [trainers, setTrainers] = useState<Trainer[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [availabilityFilter, setAvailabilityFilter] = useState<boolean | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState("");
 
   useEffect(() => {
     if (status === "unauthenticated") {
@@ -55,8 +31,60 @@ export default function TrainersPage() {
     }
   }, [status, router]);
 
+  // Fetch trainers from the API
+  useEffect(() => {
+    const fetchTrainers = async () => {
+      if (status === "authenticated" && session) {
+        try {
+          setIsLoading(true);
+          
+          // Fetch all trainers
+          const trainersResponse = await fetch("/api/trainers");
+          
+          if (!trainersResponse.ok) {
+            throw new Error("Failed to fetch trainers");
+          }
+          
+          const trainersData = await trainersResponse.json();
+          
+          // Fetch all batches to count assignments
+          const batchesResponse = await fetch("/api/batches");
+          let batchesData = [];
+          
+          if (batchesResponse.ok) {
+            batchesData = await batchesResponse.json();
+          }
+          
+          // Process each trainer to add the assigned batches count
+          const processedTrainers = trainersData.map((trainer: Trainer) => {
+            // Count batches assigned to this trainer
+            const assignedBatchesCount = batchesData.filter(
+              (batch: any) => batch.trainerId === trainer.id
+            ).length;
+            
+            return {
+              ...trainer,
+              assignedBatches: assignedBatchesCount
+            };
+          });
+          
+          setTrainers(processedTrainers);
+          setError("");
+        } catch (err) {
+          console.error("Error fetching trainers:", err);
+          setError("Failed to load trainers. Please try again later.");
+        } finally {
+          setIsLoading(false);
+        }
+      }
+    };
+
+    fetchTrainers();
+  }, [session, status]);
+
   // Check if user has permission to view trainers
-  const canViewTrainers = session?.user?.role === "OPERATIONS";
+  const userRole = session?.user?.role ? String(session.user.role).toUpperCase() : "";
+  const canViewTrainers = userRole === "OPERATIONS" || userRole === "ADMIN";
 
   // Filter trainers based on search query and availability
   const filteredTrainers = trainers.filter((trainer) => {
@@ -71,10 +99,10 @@ export default function TrainersPage() {
     return matchesSearch && matchesAvailability;
   });
 
-  if (status === "loading") {
+  if (status === "loading" || isLoading) {
     return (
       <div className="flex justify-center items-center min-h-[50vh] bg-white">
-        <div className="text-xl text-gray-700">Loading...</div>
+        <div className="text-xl text-gray-700">Loading trainers...</div>
       </div>
     );
   }
@@ -94,10 +122,16 @@ export default function TrainersPage() {
     <div className="py-8 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto bg-white">
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-2xl font-bold text-gray-900">Trainers</h1>
-        <Button onClick={() => router.push("/trainers/invite")}>
-          Invite New Trainer
+        <Button onClick={() => router.push("/admin/register")}>
+          Create New Trainer
         </Button>
       </div>
+
+      {error && (
+        <div className="mb-6 bg-red-50 p-4 rounded-lg border border-red-200 text-red-700">
+          {error}
+        </div>
+      )}
 
       <div className="mb-6 bg-white p-4 rounded-lg shadow-sm border border-gray-200">
         <div className="flex flex-col md:flex-row md:items-end gap-4">
@@ -161,63 +195,66 @@ export default function TrainersPage() {
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-gray-200">
-            {filteredTrainers.map((trainer) => (
-              <tr key={trainer.id} className="hover:bg-gray-50">
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <div className="flex items-center">
-                    <div>
-                      <div className="text-sm font-medium text-gray-900">
-                        {trainer.name}
-                      </div>
-                      <div className="text-sm text-gray-700">
-                        {trainer.email}
+            {filteredTrainers.length > 0 ? (
+              filteredTrainers.map((trainer) => (
+                <tr key={trainer.id} className="hover:bg-gray-50">
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <div className="flex items-center">
+                      <div>
+                        <div className="text-sm font-medium text-gray-900">
+                          {trainer.name}
+                        </div>
+                        <div className="text-sm text-gray-700">
+                          {trainer.email}
+                        </div>
                       </div>
                     </div>
-                  </div>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
-                  {trainer.specialization}
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full 
-                    ${trainer.availability ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"}`}
-                  >
-                    {trainer.availability ? "Available" : "Unavailable"}
-                  </span>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
-                  {trainer.assignedBatches}
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                  <div className="flex justify-end space-x-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => router.push(`/trainers/${trainer.id}`)}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
+                    {trainer.specialization}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full 
+                      ${trainer.availability ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"}`}
                     >
-                      View Profile
-                    </Button>
-                    {trainer.availability && (
+                      {trainer.availability ? "Available" : "Unavailable"}
+                    </span>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
+                    {trainer.assignedBatches}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                    <div className="flex justify-end space-x-2">
                       <Button
                         variant="outline"
                         size="sm"
-                        className="text-blue-600"
-                        onClick={() => router.push(`/trainers/${trainer.id}/assign-batch`)}
+                        onClick={() => router.push(`/trainers/${trainer.id}`)}
                       >
-                        Assign to Batch
+                        View Profile
                       </Button>
-                    )}
-                  </div>
-                </td>
-              </tr>
-            ))}
-            {filteredTrainers.length === 0 && (
+                      {trainer.availability && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="text-blue-600"
+                          onClick={() => router.push(`/trainers/${trainer.id}/assign-batch`)}
+                        >
+                          Assign to Batch
+                        </Button>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              ))
+            ) : (
               <tr>
                 <td
                   colSpan={5}
                   className="px-6 py-10 text-center text-sm text-gray-700"
                 >
-                  No trainers found
+                  {searchQuery || availabilityFilter !== null
+                    ? "No trainers found matching your filters"
+                    : "No trainers available. Create your first trainer!"}
                 </td>
               </tr>
             )}

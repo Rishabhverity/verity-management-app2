@@ -29,12 +29,13 @@ export default function RegisterPage() {
     return null;
   }
 
-  if (session?.user?.role !== "OPERATIONS") {
+  const userRole = session?.user?.role ? String(session.user.role).toUpperCase() : "";
+  if (userRole !== "OPERATIONS" && userRole !== "ADMIN") {
     return (
       <div className="max-w-4xl mx-auto p-8">
         <h1 className="text-2xl font-bold text-red-600 mb-4">Access Denied</h1>
         <p className="text-gray-700">
-          You do not have permission to access this page. Only Operations users can register new users.
+          You do not have permission to access this page. Only Operations and Admin users can register new users.
         </p>
         <Button 
           className="mt-4" 

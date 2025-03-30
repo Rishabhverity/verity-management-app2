@@ -12,6 +12,7 @@ type PurchaseOrder = {
   amount: number;
   status: string;
   uploadedAt: string;
+  fileUrl?: string | null;
 };
 
 export default function NewInvoicePage() {
@@ -39,22 +40,24 @@ export default function NewInvoicePage() {
     }
 
     if (poId) {
-      // Fetch PO details - in real app, this would be an API call
-      // For now, using mock data
-      const mockPurchaseOrder = {
-        id: poId,
-        poNumber: `PO-2023-00${poId}`,
-        clientName: poId === "1" ? "ABC Corp" : poId === "2" ? "XYZ Ltd" : "Tech Solutions",
-        amount: poId === "1" ? 5000 : poId === "2" ? 3500 : 7500,
-        status: "PROCESSED",
-        uploadedAt: new Date().toISOString()
-      };
-      
-      setPo(mockPurchaseOrder);
-      setFormData({
-        invoiceNumber: `INV-${new Date().getFullYear()}-${String(Math.floor(Math.random() * 1000)).padStart(3, '0')}`,
-        notes: ""
-      });
+      // Fetch the PO from localStorage
+      try {
+        const storedPOs = localStorage.getItem('verity-purchase-orders');
+        if (storedPOs) {
+          const parsedPOs = JSON.parse(storedPOs);
+          const foundPO = parsedPOs.find((po: PurchaseOrder) => po.id === poId);
+          
+          if (foundPO) {
+            setPo(foundPO);
+            setFormData({
+              invoiceNumber: `INV-${new Date().getFullYear()}-${String(Math.floor(Math.random() * 1000)).padStart(3, '0')}`,
+              notes: ""
+            });
+          }
+        }
+      } catch (error) {
+        console.error("Error loading purchase order:", error);
+      }
     }
   }, [poId, router, session, status]);
 
@@ -74,6 +77,45 @@ export default function NewInvoicePage() {
     setIsLoading(true);
     
     try {
+      // Update the status of the PO to INVOICED in localStorage
+      const storedPOs = localStorage.getItem('verity-purchase-orders');
+      if (storedPOs) {
+        const parsedPOs = JSON.parse(storedPOs);
+        const updatedPOs = parsedPOs.map((storedPO: PurchaseOrder) => 
+          storedPO.id === po.id ? { ...storedPO, status: "INVOICED" } : storedPO
+        );
+        
+        // Save the updated POs back to localStorage
+        localStorage.setItem('verity-purchase-orders', JSON.stringify(updatedPOs));
+      }
+      
+      // Create a new invoice and add it to localStorage
+      const newInvoice = {
+        id: `inv-${Date.now()}`,
+        invoiceNumber: formData.invoiceNumber,
+        poNumber: po.poNumber,
+        clientName: po.clientName,
+        amount: po.amount,
+        status: "PENDING",
+        generatedAt: new Date().toISOString(),
+        fileUrl: po.fileUrl || null,
+        notes: formData.notes || ""
+      };
+      
+      // Load existing invoices from localStorage
+      const storedInvoices = localStorage.getItem('verity-invoices');
+      let updatedInvoices = [];
+      
+      if (storedInvoices) {
+        const parsedInvoices = JSON.parse(storedInvoices);
+        updatedInvoices = [newInvoice, ...parsedInvoices];
+      } else {
+        updatedInvoices = [newInvoice];
+      }
+      
+      // Save updated invoices to localStorage
+      localStorage.setItem('verity-invoices', JSON.stringify(updatedInvoices));
+      
       // In a real app, this would be an API call to create the invoice
       // For now, just simulate a delay and redirect
       await new Promise(resolve => setTimeout(resolve, 1000));
@@ -130,7 +172,7 @@ export default function NewInvoicePage() {
             </div>
             <div>
               <p className="text-sm font-medium text-gray-500">Amount</p>
-              <p className="text-base font-medium">${po.amount.toFixed(2)}</p>
+              <p className="text-base font-medium">₹{po.amount.toFixed(2)}</p>
             </div>
             <div>
               <p className="text-sm font-medium text-gray-500">Date</p>

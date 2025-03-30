@@ -29,6 +29,9 @@ interface Batch {
   trainerName?: string;
   trainees?: Trainee[];
   meetingLink?: string;
+  venue?: string;
+  accommodation?: string;
+  travel?: string;
 }
 
 export default function BatchesPage() {
@@ -41,9 +44,33 @@ export default function BatchesPage() {
   const [editingBatch, setEditingBatch] = useState<Batch | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [filterStatus, setFilterStatus] = useState<BatchStatus | "ALL">("ALL");
+  const [trainers, setTrainers] = useState<{id: string, name: string}[]>([]);
 
   // Check if user can view and manage batches
-  const canViewBatches = session?.user?.role === "OPERATIONS";
+  const userRole = session?.user?.role ? String(session.user.role).toUpperCase() : "";
+  const canViewBatches = userRole === "ADMIN";
+
+  // Fetch trainers data
+  useEffect(() => {
+    const fetchTrainers = async () => {
+      try {
+        const response = await fetch('/api/trainers');
+        if (response.ok) {
+          const data = await response.json();
+          setTrainers(data.map((trainer: any) => ({ 
+            id: trainer.id, 
+            name: trainer.name 
+          })));
+        }
+      } catch (error) {
+        console.error('Error fetching trainers:', error);
+      }
+    };
+
+    if (status === "authenticated" && canViewBatches) {
+      fetchTrainers();
+    }
+  }, [status, canViewBatches]);
 
   // Initialize from localStorage or use mock data
   useEffect(() => {
@@ -73,6 +100,24 @@ export default function BatchesPage() {
       }
     }
   }, [status, canViewBatches]);
+
+  // Helper function to get trainer name by ID
+  const getTrainerName = (trainerId?: string) => {
+    if (!trainerId) return "";
+    const trainer = trainers.find(t => t.id === trainerId);
+    return trainer ? trainer.name : "";
+  };
+
+  // Update batch display to include trainer names
+  useEffect(() => {
+    if (trainers.length > 0 && batches.length > 0) {
+      const updatedBatches = batches.map(batch => ({
+        ...batch,
+        trainerName: getTrainerName(batch.trainerId)
+      }));
+      setBatches(updatedBatches);
+    }
+  }, [trainers]);
 
   // Helper to set default mock batches
   const setDefaultBatches = () => {
@@ -111,12 +156,13 @@ export default function BatchesPage() {
     saveBatchesToStorage(mockBatches);
   };
 
-  // Save batches to localStorage
-  const saveBatchesToStorage = (batchesToSave: Batch[]) => {
+  // Save batches to localStorage for persistence
+  const saveBatchesToStorage = (updatedBatches: Batch[]) => {
     try {
-      localStorage.setItem('verity-batches', JSON.stringify(batchesToSave));
+      localStorage.setItem('verity-batches', JSON.stringify(updatedBatches));
+      console.log("Saved batches to localStorage:", updatedBatches.length);
     } catch (error) {
-      console.error('Error saving batches to localStorage:', error);
+      console.error("Error saving batches to localStorage:", error);
     }
   };
 
@@ -132,7 +178,16 @@ export default function BatchesPage() {
         traineeCount: data.trainees?.length || 0,
       };
 
+      // Get trainer name if trainerId is provided
+      let trainerName = "";
+      if (data.trainerId) {
+        const trainer = trainers.find(t => t.id === data.trainerId);
+        trainerName = trainer ? trainer.name : "";
+        console.log("Found trainer for ID:", data.trainerId, "Name:", trainerName);
+      }
+
       let updatedBatches;
+      let newBatch;
 
       if (editingBatch) {
         // Update existing batch
@@ -143,30 +198,64 @@ export default function BatchesPage() {
                 ...data,
                 status: getStatus(data.startDate, data.endDate),
                 trainerId: data.trainerId || null,
+                trainerName: trainerName || null,
                 startTime: data.startTime || null,
                 endTime: data.endTime || null,
-                meetingLink: data.meetingLink || null,
+                meetingLink: data.trainingType === "ONLINE" ? data.meetingLink || null : null,
+                venue: data.trainingType === "OFFLINE" ? data.venue || null : null,
+                accommodation: data.trainingType === "OFFLINE" ? data.accommodation || null : null,
+                travel: data.trainingType === "OFFLINE" ? data.travel || null : null,
               } 
             : batch
         );
       } else {
         // Create new batch
-        const newBatch: Batch = {
-          id: `${Date.now()}`, // Use timestamp for unique ID
+        newBatch = {
+          id: `batch-${Date.now()}`, // Use timestamp for unique ID
           ...data,
           status: getStatus(data.startDate, data.endDate),
           traineeCount: data.trainees?.length || 0,
           trainerId: data.trainerId || null,
+          trainerName: trainerName || null,
           startTime: data.startTime || null,
           endTime: data.endTime || null,
-          meetingLink: data.meetingLink || null,
+          meetingLink: data.trainingType === "ONLINE" ? data.meetingLink || null : null,
+          venue: data.trainingType === "OFFLINE" ? data.venue || null : null,
+          accommodation: data.trainingType === "OFFLINE" ? data.accommodation || null : null,
+          travel: data.trainingType === "OFFLINE" ? data.travel || null : null,
         };
+        
+        console.log("Creating new batch:", newBatch);
         updatedBatches = [newBatch, ...batches];
       }
 
-      // Update state and localStorage
+      // Save to API
+      try {
+        const apiEndpoint = editingBatch ? `/api/batches/${editingBatch.id}` : "/api/batches";
+        const method = editingBatch ? "PUT" : "POST";
+        
+        const apiResponse = await fetch(apiEndpoint, {
+          method: method,
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(editingBatch ? { ...data, id: editingBatch.id } : data),
+        });
+        
+        if (!apiResponse.ok) {
+          console.warn("API save failed, but continuing with localStorage save:", 
+            await apiResponse.text());
+        } else {
+          console.log("Batch saved successfully to API");
+        }
+      } catch (apiError) {
+        console.error("Error saving to API, continuing with localStorage save:", apiError);
+      }
+
+      // Update state and localStorage regardless of API success
       setBatches(updatedBatches);
       saveBatchesToStorage(updatedBatches);
+      console.log("Updated batches in state and localStorage");
 
       // Reset form state
       setIsFormOpen(false);
@@ -386,6 +475,13 @@ export default function BatchesPage() {
                       </a>
                     </div>
                   )}
+                  {batch.trainingType === "OFFLINE" && (
+                    <div className="text-xs text-gray-500 mt-1">
+                      {batch.venue && <div>Venue: {batch.venue}</div>}
+                      {batch.accommodation && <div className="mt-1">Accommodation provided</div>}
+                      {batch.travel && <div className="mt-1">Travel arranged</div>}
+                    </div>
+                  )}
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap">
                   <span
@@ -405,7 +501,7 @@ export default function BatchesPage() {
                   {batch.traineeCount}
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
-                  {batch.trainerName || (batch.trainerId ? "Assigned" : "Not Assigned")}
+                  {batch.trainerName || "Not Assigned"}
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                   <div className="flex justify-end space-x-2">

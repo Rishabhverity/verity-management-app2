@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { PrismaClient } from "@prisma/client";
 import { getServerSession } from "next-auth/next";
-import { authOptions } from "@/app/api/auth/[...nextauth]/route";
+import { authOptions } from "@/lib/auth-config";
 
 const prisma = new PrismaClient();
 
@@ -10,8 +10,9 @@ export async function GET(req: NextRequest) {
   try {
     // Check authorization
     const session = await getServerSession(authOptions);
+    const userRole = session?.user?.role ? String(session.user.role).toUpperCase() : "";
     
-    if (!session || !["OPERATIONS"].includes(session.user.role as string)) {
+    if (!session || (userRole !== "OPERATIONS" && userRole !== "ADMIN")) {
       return NextResponse.json(
         { message: "You do not have permission to access trainer data" },
         { status: 403 }

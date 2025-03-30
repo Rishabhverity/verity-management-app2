@@ -50,8 +50,9 @@ export default function AssignTrainerPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [isAssigning, setIsAssigning] = useState(false);
 
-  // Check if user can assign trainers
-  const canAssignTrainers = session?.user?.role === "OPERATIONS";
+  // Check if user has permission to assign trainers
+  const userRole = session?.user?.role ? String(session.user.role).toUpperCase() : "";
+  const canAssignTrainers = userRole === "OPERATIONS" || userRole === "ADMIN";
 
   // Load trainers and batch data
   useEffect(() => {

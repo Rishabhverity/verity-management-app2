@@ -1,7 +1,9 @@
 import { getServerSession } from "next-auth/next";
-import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 import { redirect } from "next/navigation";
 import { UserRole } from "@prisma/client";
+import { authOptions } from "./auth-config";
+
+export { authOptions };
 
 export const getSession = async () => {
   return await getServerSession(authOptions);
