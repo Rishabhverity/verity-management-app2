@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { TrainingType } from "@prisma/client";
 import { Button } from "@/components/ui/button";
 import BatchForm from "@/components/forms/BatchForm";
+import { Pagination } from "@/components/ui/pagination";
 
 // Define types
 type BatchStatus = "UPCOMING" | "ONGOING" | "COMPLETED";
@@ -45,6 +46,10 @@ export default function BatchesPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [filterStatus, setFilterStatus] = useState<BatchStatus | "ALL">("ALL");
   const [trainers, setTrainers] = useState<{id: string, name: string}[]>([]);
+  
+  // Pagination states
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 5;
 
   // Check if user can view and manage batches
   const userRole = session?.user?.role ? String(session.user.role).toUpperCase() : "";
@@ -100,6 +105,11 @@ export default function BatchesPage() {
       }
     }
   }, [status, canViewBatches]);
+
+  // Reset to first page when filter changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [filterStatus]);
 
   // Helper function to get trainer name by ID
   const getTrainerName = (trainerId?: string) => {
@@ -164,6 +174,22 @@ export default function BatchesPage() {
     } catch (error) {
       console.error("Error saving batches to localStorage:", error);
     }
+  };
+
+  // Apply status filter and pagination to batches
+  const filteredBatches = batches.filter(batch => 
+    filterStatus === "ALL" || batch.status === filterStatus
+  );
+  
+  const totalPages = Math.ceil(filteredBatches.length / itemsPerPage);
+  const paginatedBatches = filteredBatches.slice(
+    (currentPage - 1) * itemsPerPage,
+    currentPage * itemsPerPage
+  );
+
+  // Handle pagination page change
+  const handlePageChange = (page: number) => {
+    setCurrentPage(page);
   };
 
   // Handle creating or updating a batch
@@ -275,11 +301,6 @@ export default function BatchesPage() {
     if (now > endDate) return "COMPLETED";
     return "ONGOING";
   };
-
-  // Filter batches based on status
-  const filteredBatches = filterStatus === "ALL"
-    ? batches
-    : batches.filter(batch => batch.status === filterStatus);
 
   // Handle editing a batch
   const handleEditBatch = (batch: Batch) => {
@@ -451,7 +472,7 @@ export default function BatchesPage() {
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-gray-200">
-            {filteredBatches.map((batch) => (
+            {paginatedBatches.map((batch) => (
               <tr key={batch.id} className="hover:bg-gray-50">
                 <td className="px-6 py-4 whitespace-nowrap">
                   <div className="text-sm font-medium text-gray-900">
@@ -524,7 +545,7 @@ export default function BatchesPage() {
                 </td>
               </tr>
             ))}
-            {filteredBatches.length === 0 && (
+            {paginatedBatches.length === 0 && (
               <tr>
                 <td
                   colSpan={7}
@@ -537,6 +558,17 @@ export default function BatchesPage() {
           </tbody>
         </table>
       </div>
+
+      {/* Pagination */}
+      {filteredBatches.length > itemsPerPage && (
+        <div className="mt-6">
+          <Pagination
+            currentPage={currentPage}
+            totalPages={totalPages}
+            onPageChange={handlePageChange}
+          />
+        </div>
+      )}
     </div>
   );
 } 

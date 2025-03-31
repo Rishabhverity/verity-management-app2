@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation";
 import { useSession } from "next-auth/react";
 import * as XLSX from "xlsx";
 import { format } from "date-fns";
+import { Pagination } from "@/components/ui/pagination";
 
 interface Student {
   id: string;
@@ -57,6 +58,11 @@ export default function TrainerStudentsPage() {
     format(new Date(), "yyyy-MM-dd")
   );
   const [attendanceRecords, setAttendanceRecords] = useState<AttendanceRecord[]>([]);
+  
+  // Search and pagination states
+  const [searchTerm, setSearchTerm] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10;
 
   useEffect(() => {
     if (status === "authenticated") {
@@ -85,6 +91,11 @@ export default function TrainerStudentsPage() {
       loadExistingAttendance(selectedBatchId, attendanceDate);
     }
   }, [selectedBatchId, batches, attendanceDate]);
+
+  // Reset pagination when search term changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, selectedBatchId]);
 
   const fetchBatches = async () => {
     try {
@@ -169,6 +180,10 @@ export default function TrainerStudentsPage() {
     if (selectedBatchId) {
       loadExistingAttendance(selectedBatchId, newDate);
     }
+  };
+
+  const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setSearchTerm(e.target.value);
   };
 
   const handleAttendanceToggle = (studentId: string) => {
@@ -286,6 +301,24 @@ export default function TrainerStudentsPage() {
     }
   };
 
+  // Filter students based on search term
+  const filteredStudents = students.filter(student => 
+    student.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (student.email && student.email.toLowerCase().includes(searchTerm.toLowerCase()))
+  );
+
+  // Paginate the filtered students
+  const totalPages = Math.ceil(filteredStudents.length / itemsPerPage);
+  const paginatedStudents = filteredStudents.slice(
+    (currentPage - 1) * itemsPerPage,
+    currentPage * itemsPerPage
+  );
+
+  // Handle pagination
+  const handlePageChange = (page: number) => {
+    setCurrentPage(page);
+  };
+
   if (status === "loading" || loading) {
     return (
       <div className="p-4">
@@ -350,6 +383,21 @@ export default function TrainerStudentsPage() {
       
       {students.length > 0 ? (
         <>
+          {/* Search box */}
+          <div className="mb-4">
+            <label htmlFor="searchStudents" className="block text-sm font-medium text-gray-700 mb-1">
+              Search Students
+            </label>
+            <input
+              type="text"
+              id="searchStudents"
+              placeholder="Search by name or email..."
+              value={searchTerm}
+              onChange={handleSearchChange}
+              className="w-full p-2 border rounded"
+            />
+          </div>
+          
           <div className="bg-white shadow-md rounded-lg overflow-hidden mb-6">
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
@@ -366,7 +414,7 @@ export default function TrainerStudentsPage() {
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {students.map(student => (
+                {paginatedStudents.map(student => (
                   <tr key={student.id}>
                     <td className="px-6 py-4 whitespace-nowrap">
                       {student.name}
@@ -384,9 +432,28 @@ export default function TrainerStudentsPage() {
                     </td>
                   </tr>
                 ))}
+                
+                {paginatedStudents.length === 0 && (
+                  <tr>
+                    <td colSpan={3} className="px-6 py-4 text-center text-gray-500">
+                      No students found matching your search.
+                    </td>
+                  </tr>
+                )}
               </tbody>
             </table>
           </div>
+          
+          {/* Pagination */}
+          {filteredStudents.length > itemsPerPage && (
+            <div className="mb-6">
+              <Pagination
+                currentPage={currentPage}
+                totalPages={totalPages}
+                onPageChange={handlePageChange}
+              />
+            </div>
+          )}
           
           <div className="flex flex-wrap gap-4">
             <button
