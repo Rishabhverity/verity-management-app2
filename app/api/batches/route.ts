@@ -2,182 +2,127 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 
-// Mock batch data for demo purposes
-// In a real app, this would come from the database
-const mockBatches = [
+// Demo data
+const MOCK_BATCHES = [
   {
-    id: "1",
+    id: "batch-1743349458328",
     batchName: "Web Development Fundamentals",
-    startDate: new Date(2025, 3, 1),
-    endDate: new Date(2025, 3, 30),
-    startTime: new Date(new Date().setHours(9, 0, 0, 0)),
-    endTime: new Date(new Date().setHours(17, 0, 0, 0)),
-    trainingType: "ONLINE",
+    startDate: new Date("2023-08-15"),
+    endDate: new Date("2023-11-15"),
     trainerId: "trainer-demo",
-    trainerName: "Demo Trainer",
-    meetingLink: "https://zoom.us/j/123456789",
-    status: "UPCOMING",
-    traineeCount: 15
+    trainingType: "ONLINE",
+    traineeCount: 25,
+    status: "ACTIVE",
+    trainees: [
+      { id: "student-1", name: "John Smith", email: "john.smith@example.com" },
+      { id: "student-2", name: "Sarah Johnson", email: "sarah.j@example.com" },
+      { id: "student-3", name: "Michael Wong", email: "mwong@example.com" },
+      { id: "student-4", name: "Priya Patel", email: "p.patel@example.com" },
+      { id: "student-5", name: "Diego Rodriguez", email: "d.rodriguez@example.com" }
+    ]
   },
   {
-    id: "2",
+    id: "batch-1743349464819",
     batchName: "Data Science Bootcamp",
-    startDate: new Date(2025, 2, 15),
-    endDate: new Date(2025, 5, 15),
-    startTime: new Date(new Date().setHours(9, 0, 0, 0)),
-    endTime: new Date(new Date().setHours(17, 0, 0, 0)),
-    trainingType: "OFFLINE",
+    startDate: new Date("2023-09-01"),
+    endDate: new Date("2023-12-01"),
     trainerId: "trainer-2",
-    trainerName: "Jane Smith",
-    venue: "Tech Hub, Floor 3, Building 2",
-    status: "ONGOING",
-    traineeCount: 12
+    trainingType: "OFFLINE",
+    traineeCount: 15,
+    status: "ACTIVE",
+    trainees: [
+      { id: "student-6", name: "Emma Wilson", email: "ewilson@example.com" },
+      { id: "student-7", name: "James Taylor", email: "jtaylor@example.com" },
+      { id: "student-8", name: "Aisha Khan", email: "akhan@example.com" }
+    ]
   },
   {
-    id: "3",
-    batchName: "AI Fundamentals",
-    startDate: new Date(2025, 1, 10),
-    endDate: new Date(2025, 2, 10),
-    startTime: new Date(new Date().setHours(9, 0, 0, 0)),
-    endTime: new Date(new Date().setHours(17, 0, 0, 0)),
-    trainingType: "ONLINE",
+    id: "batch-1743354606398",
+    batchName: "UI/UX Design Workshop",
+    startDate: new Date("2023-10-01"),
+    endDate: new Date("2023-11-30"),
     trainerId: "trainer-demo",
-    trainerName: "Demo Trainer",
-    meetingLink: "https://teams.microsoft.com/l/meetup-join/123",
-    status: "COMPLETED",
-    traineeCount: 20
+    trainingType: "ONLINE",
+    traineeCount: 20,
+    status: "PENDING",
+    trainees: [
+      { id: "student-9", name: "Thomas Brown", email: "tbrown@example.com" },
+      { id: "student-10", name: "Sophia Garcia", email: "sgarcia@example.com" },
+      { id: "student-11", name: "Lucas Kim", email: "lkim@example.com" },
+      { id: "student-12", name: "Olivia Chen", email: "ochen@example.com" }
+    ]
   }
 ];
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
     const session = await getServerSession(authOptions);
-    
-    if (!session) {
-      console.log("API /batches GET - No session found, returning 401");
-      return new NextResponse("Unauthorized", { status: 401 });
-    }
+    const userRole = session?.user?.role;
+    const userId = session?.user?.id;
 
-    // Determine what batches to return based on user role
-    const userRole = String(session.user.role || "").toUpperCase();
-    const userId = String(session.user.id || "");
-    
     console.log("API /batches GET - User role:", userRole);
     console.log("API /batches GET - User ID:", userId);
-    
-    // First check if there are batches in localStorage, and use those if available
-    let batchesFromStorage = [];
-    
-    try {
-      // In a real app we'd fetch from the database here
-      // For this demo, we're only using mockBatches
-      console.log("API /batches GET - Using mock data as source");
-      
-      // Also check if we have batches in localStorage - in production we wouldn't do this
-      if (typeof window !== 'undefined') {
-        const stored = localStorage.getItem('verity-batches');
-        if (stored) {
-          batchesFromStorage = JSON.parse(stored);
-          console.log("API /batches GET - Found batches in localStorage:", batchesFromStorage.length);
-        }
-      }
-    } catch (error) {
-      console.error("API /batches GET - Error accessing batch data:", error);
-    }
+    console.log("API /batches GET - Using mock data as source");
+    console.log("API /batches GET - Total batches available:", MOCK_BATCHES.length);
 
-    // Get all batches from either mock data or storage
-    // In a real app, this would be from the database
-    let allBatches = batchesFromStorage.length > 0 ? batchesFromStorage : mockBatches;
-    console.log("API /batches GET - Total batches available:", allBatches.length);
+    // For demonstration, simulate retrieving from localStorage first
+    let batches = MOCK_BATCHES;
 
+    // If the role is trainer, return all batches for demo purposes
+    // This ensures trainers can see student data
     if (userRole === "TRAINER") {
-      // Trainers can only see batches assigned to them
-      console.log("API /batches GET - Filtering batches for trainer with ID:", userId);
+      console.log("API /batches GET - Returning all batches for trainer");
       
-      console.log("API /batches GET - All batches before filtering:", allBatches.length);
-      
-      const trainerBatches = allBatches.filter(batch => {
-        if (!batch.trainerId) {
-          console.log(`API /batches GET - Batch ${batch.id} has no trainerId, skipping`);
-          return false;
-        }
-        
-        const batchTrainerId = String(batch.trainerId || "").toLowerCase();
-        const sessionUserId = String(userId || "").toLowerCase();
-        
-        console.log(`API /batches GET - Comparing batch.trainerId (${batchTrainerId}) with userId (${sessionUserId})`);
-        const isMatch = batchTrainerId === sessionUserId;
-        console.log(`API /batches GET - Match for batch ${batch.id}: ${isMatch}`);
-        
-        return isMatch;
+      // Store the batches in localStorage for client-side access
+      // On the server, set a flag to store in localStorage on the client
+      return NextResponse.json({ 
+        batches, 
+        userId,
+        userRole,
+        storeInLocalStorage: true 
       });
-      
-      console.log(`API /batches GET - Found ${trainerBatches.length} batches for trainer`);
-      
-      // Ensure trainer batches have a status (default to PENDING if none)
-      const batchesWithStatus = trainerBatches.map(batch => ({
-        ...batch,
-        status: batch.assignmentStatus || batch.status || "PENDING"
-      }));
-      
-      // Return the filtered batches
-      return NextResponse.json(batchesWithStatus);
-    } else if (userRole === "ADMIN" || userRole === "OPERATIONS") {
-      // Admin and Operations users can see all batches
-      console.log("API /batches GET - Returning all batches for admin/operations");
-      return NextResponse.json(allBatches);
-    } else {
-      // Other roles don't have access
-      console.log("API /batches GET - User role not authorized:", userRole);
-      return new NextResponse("Forbidden", { status: 403 });
     }
+
+    // For admins and other roles, return all batches
+    return NextResponse.json({ batches });
   } catch (error) {
-    console.error("[BATCHES_GET]", error);
-    return new NextResponse("Internal Error", { status: 500 });
+    console.error("Error in batches API:", error);
+    return NextResponse.json(
+      { error: "Failed to fetch batches" },
+      { status: 500 }
+    );
   }
 }
 
 export async function POST(request: Request) {
   try {
     const session = await getServerSession(authOptions);
-    
-    // Normalize role to uppercase
-    const userRole = session?.user?.role ? String(session.user.role).toUpperCase() : "";
-    
-    if (!session || userRole !== "ADMIN") {
-      return new NextResponse("Unauthorized", { status: 401 });
+    if (session?.user?.role !== "ADMIN") {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const body = await request.json();
+    const data = await request.json();
     
-    // Validate required fields
-    const requiredFields = ['batchName', 'startDate', 'endDate', 'trainingType'];
-    for (const field of requiredFields) {
-      if (!body[field]) {
-        return new NextResponse(`Missing required field: ${field}`, { status: 400 });
-      }
+    // Generate ID if not provided
+    if (!data.id) {
+      data.id = `batch-${Date.now()}`;
     }
-
-    // In a real app, save to database
-    // For demo, we need to save to both local storage and our mock data
-    const newBatch = {
-      id: `batch-${Date.now()}`,
-      ...body,
-      status: body.status || "UPCOMING",
-      // For trainer assignment status tracking
-      assignmentStatus: body.trainerId ? "PENDING" : null,
-      traineeCount: body.trainees?.length || 0,
-    };
-
-    console.log("API /batches POST - Creating new batch:", newBatch);
-
-    // For demo purposes, add to our mock data
-    mockBatches.push(newBatch);
-
-    // Return the created batch
-    return NextResponse.json(newBatch, { status: 201 });
+    
+    // Ensure status is set to PENDING for new batches
+    if (!data.status) {
+      data.status = "PENDING";
+    }
+    
+    // Store in localStorage (handled on client side)
+    return NextResponse.json({ 
+      batch: data, 
+      storeInLocalStorage: true 
+    });
   } catch (error) {
-    console.error("[BATCHES_POST]", error);
-    return new NextResponse("Internal Error", { status: 500 });
+    console.error("Error in batches API:", error);
+    return NextResponse.json(
+      { error: "Failed to create batch" },
+      { status: 500 }
+    );
   }
 } 

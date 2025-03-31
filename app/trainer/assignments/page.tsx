@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Check, X, RefreshCcw } from "lucide-react";
+import { toast } from "react-hot-toast";
 
 type TrainingType = "ONLINE" | "OFFLINE";
 type AssignmentStatus = "PENDING" | "ACCEPTED" | "REJECTED" | "COMPLETED";
@@ -263,60 +264,119 @@ export default function TrainerAssignmentsPage() {
     }
   };
 
-  const handleStatusChange = (assignmentId: string, newStatus: AssignmentStatus, reason?: string) => {
-    console.log(`Changing status of assignment ${assignmentId} to ${newStatus}`);
-    
-    // Find the assignment being updated
-    const assignment = assignments.find(a => a.id === assignmentId);
-    
-    if (!assignment) {
-      console.error(`Assignment with ID ${assignmentId} not found`);
-      return;
-    }
-    
-    // Create notification if rejecting
-    if (newStatus === "REJECTED" && assignment) {
-      const notificationCreated = createNotification(assignment, reason);
-      if (notificationCreated) {
-        // Show success message
-        setShowSuccessMessage("Admin has been notified of your decision.");
-        setTimeout(() => setShowSuccessMessage(null), 5000); // Clear after 5 seconds
-      } else {
-        setShowSuccessMessage("Failed to notify admin. Your decision was recorded.");
-        setTimeout(() => setShowSuccessMessage(null), 5000);
-      }
-    } else if (newStatus === "ACCEPTED") {
-      setShowSuccessMessage("You have accepted this training assignment.");
-      setTimeout(() => setShowSuccessMessage(null), 5000);
-    }
-    
-    // Update state
-    setAssignments(prev => 
-      prev.map(assignment => 
-        assignment.id === assignmentId ? { ...assignment, status: newStatus } : assignment
-      )
-    );
-    
-    // Skip localStorage update for mock data
-    if (useMockData) {
-      console.log("Using mock data, skipping localStorage update");
-      return;
-    }
-    
-    // In a real app, you would also update this status via an API call
+  const handleStatusChange = async (batchId: string, newStatus: AssignmentStatus, reason?: string) => {
     try {
-      // Also update localStorage to persist between page refreshes
-      const storedBatches = localStorage.getItem('verity-batches');
-      if (storedBatches) {
-        const batches = JSON.parse(storedBatches);
-        const updatedBatches = batches.map((batch: any) => 
-          batch.id === assignmentId ? { ...batch, status: newStatus } : batch
-        );
-        localStorage.setItem('verity-batches', JSON.stringify(updatedBatches));
-        console.log(`Updated status of batch ${assignmentId} to ${newStatus} in localStorage`);
+      // Find the assignment
+      const assignment = assignments.find(batch => batch.id === batchId);
+      if (!assignment) {
+        toast.error("Assignment not found");
+        return;
+      }
+
+      // Create a copy of the assignment with updated status
+      const updatedAssignment = {
+        ...assignment,
+        status: newStatus,
+        reasonForRejection: newStatus === "REJECTED" ? reason : undefined,
+        trainerName: session?.user?.name || "Unknown Trainer"
+      };
+
+      // Update the assignment in the batches array
+      const updatedBatches = assignments.map(batch => 
+        batch.id === batchId ? updatedAssignment : batch
+      );
+
+      // Update state
+      setAssignments(updatedBatches);
+      
+      // If rejected, create a notification
+      if (newStatus === "REJECTED") {
+        createNotification(assignment, reason || "No reason provided");
+        
+        setShowSuccessMessage(`Admin has been notified that you've declined the training assignment.`);
+      } else if (newStatus === "ACCEPTED") {
+        setShowSuccessMessage(`You have accepted the training assignment.`);
+        
+        // Save to trainer-assignments in localStorage
+        saveAcceptedAssignment(updatedAssignment);
+      }
+
+      // Persist to localStorage
+      try {
+        let storedBatches = [];
+        const existingBatches = localStorage.getItem('verity-batches');
+        
+        if (existingBatches) {
+          storedBatches = JSON.parse(existingBatches);
+          
+          // Update the batch in localStorage
+          storedBatches = storedBatches.map((batch: any) => 
+            batch.id === batchId 
+              ? { ...batch, status: newStatus, assignmentStatus: newStatus } 
+              : batch
+          );
+        } else {
+          // If no batches in localStorage, use current state
+          storedBatches = updatedBatches;
+        }
+        
+        localStorage.setItem('verity-batches', JSON.stringify(storedBatches));
+        console.log(`Assignment status updated to ${newStatus} and saved to localStorage`);
+      } catch (error) {
+        console.error("Error saving to localStorage:", error);
       }
     } catch (error) {
-      console.error("Error updating localStorage:", error);
+      console.error("Error updating assignment status:", error);
+      toast.error("Failed to update assignment status");
+    }
+  };
+
+  // Save accepted assignment to localStorage for access in students page
+  const saveAcceptedAssignment = (assignment: any) => {
+    try {
+      // Get existing assignments
+      const existingAssignmentsStr = localStorage.getItem('trainer-assignments');
+      let assignments = [];
+      
+      if (existingAssignmentsStr) {
+        assignments = JSON.parse(existingAssignmentsStr);
+      }
+      
+      // Check if assignment already exists
+      const assignmentExists = assignments.some((a: any) => a.id === assignment.id);
+      
+      if (!assignmentExists) {
+        // Add new assignment
+        assignments.push({
+          ...assignment,
+          trainerId: session?.user?.id,
+          trainerName: session?.user?.name || "Unknown Trainer",
+          acceptedDate: new Date()
+        });
+        
+        // Save back to localStorage
+        localStorage.setItem('trainer-assignments', JSON.stringify(assignments));
+        console.log("Accepted assignment saved to localStorage:", assignment.id);
+      } else {
+        // Update existing assignment
+        assignments = assignments.map((a: any) => 
+          a.id === assignment.id 
+            ? {
+                ...a,
+                ...assignment,
+                trainerId: session?.user?.id,
+                trainerName: session?.user?.name || "Unknown Trainer",
+                acceptedDate: new Date()
+              } 
+            : a
+        );
+        
+        // Save back to localStorage
+        localStorage.setItem('trainer-assignments', JSON.stringify(assignments));
+        console.log("Accepted assignment updated in localStorage:", assignment.id);
+      }
+    } catch (error) {
+      console.error("Error saving accepted assignment:", error);
     }
   };
 
