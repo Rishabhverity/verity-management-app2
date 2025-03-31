@@ -31,6 +31,7 @@ export const Navbar = () => {
           { name: "Trainers", href: "/trainers" },
           { name: "Users", href: "/admin/users" },
           { name: "Purchase Orders", href: "/purchase-orders" },
+          { name: "Notifications", href: "/admin/notifications" },
         ];
       case "OPERATIONS":
         return [
@@ -38,6 +39,7 @@ export const Navbar = () => {
           { name: "Batches", href: "/batches" },
           { name: "Trainers", href: "/trainers" },
           { name: "Purchase Orders", href: "/purchase-orders" },
+          { name: "Notifications", href: "/admin/notifications" },
         ];
       case "ACCOUNTS":
         return [

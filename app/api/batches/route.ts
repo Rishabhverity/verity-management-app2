@@ -114,8 +114,14 @@ export async function GET() {
       
       console.log(`API /batches GET - Found ${trainerBatches.length} batches for trainer`);
       
+      // Ensure trainer batches have a status (default to PENDING if none)
+      const batchesWithStatus = trainerBatches.map(batch => ({
+        ...batch,
+        status: batch.assignmentStatus || batch.status || "PENDING"
+      }));
+      
       // Return the filtered batches
-      return NextResponse.json(trainerBatches);
+      return NextResponse.json(batchesWithStatus);
     } else if (userRole === "ADMIN" || userRole === "OPERATIONS") {
       // Admin and Operations users can see all batches
       console.log("API /batches GET - Returning all batches for admin/operations");
@@ -158,6 +164,8 @@ export async function POST(request: Request) {
       id: `batch-${Date.now()}`,
       ...body,
       status: body.status || "UPCOMING",
+      // For trainer assignment status tracking
+      assignmentStatus: body.trainerId ? "PENDING" : null,
       traineeCount: body.trainees?.length || 0,
     };
 
