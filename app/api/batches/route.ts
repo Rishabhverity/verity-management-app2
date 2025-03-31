@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 
-// Demo data
+// Demo data - including batches created by admins for various trainers
 const MOCK_BATCHES = [
   {
     id: "batch-1743349458328",
@@ -54,6 +54,43 @@ const MOCK_BATCHES = [
   }
 ];
 
+// Add recent batches - these are the ones created by admins through the UI
+// In a real app, these would be stored in a database
+const RECENT_BATCHES = [
+  {
+    id: "batch-recent-1",
+    batchName: "React Advanced Training",
+    startDate: new Date(),
+    endDate: new Date(new Date().setMonth(new Date().getMonth() + 2)),
+    trainerId: "cm8vdznmy0000logs085del8m", // This is the trainer-demo ID
+    trainingType: "ONLINE",
+    traineeCount: 15,
+    status: "PENDING",
+    trainees: [
+      { id: "student-r1", name: "Alice Johnson", email: "alice@example.com" },
+      { id: "student-r2", name: "Bob Smith", email: "bob@example.com" },
+      { id: "student-r3", name: "Charlie Brown", email: "charlie@example.com" }
+    ]
+  },
+  {
+    id: "batch-recent-2",
+    batchName: "Node.js Backend Development",
+    startDate: new Date(),
+    endDate: new Date(new Date().setMonth(new Date().getMonth() + 3)),
+    trainerId: "cm8vdznmy0000logs085del8m", // This is the trainer-demo ID
+    trainingType: "HYBRID",
+    traineeCount: 10,
+    status: "PENDING",
+    trainees: [
+      { id: "student-r4", name: "Diana Prince", email: "diana@example.com" },
+      { id: "student-r5", name: "Ethan Hunt", email: "ethan@example.com" }
+    ]
+  }
+];
+
+// Storage for newly created batches - server-side only
+const DYNAMIC_BATCHES = [];
+
 export async function GET(request: Request) {
   try {
     const session = await getServerSession(authOptions);
@@ -62,29 +99,33 @@ export async function GET(request: Request) {
 
     console.log("API /batches GET - User role:", userRole);
     console.log("API /batches GET - User ID:", userId);
-    console.log("API /batches GET - Using mock data as source");
-    console.log("API /batches GET - Total batches available:", MOCK_BATCHES.length);
+    
+    // Create combined batches list from all sources
+    const allBatches = [...MOCK_BATCHES, ...RECENT_BATCHES, ...DYNAMIC_BATCHES];
+    console.log("API /batches GET - Found", allBatches.length, "batches for trainer");
 
-    // For demonstration, simulate retrieving from localStorage first
-    let batches = MOCK_BATCHES;
-
-    // If the role is trainer, return all batches for demo purposes
-    // This ensures trainers can see student data
     if (userRole === "TRAINER") {
-      console.log("API /batches GET - Returning all batches for trainer");
+      // For trainers, mark batches that are assigned to them
+      const trainerBatches = allBatches.map(batch => ({
+        ...batch,
+        isAssignedToCurrentTrainer: 
+          // Match by exact ID
+          batch.trainerId === userId || 
+          // Special handling for demo account
+          (userId === 'cm8vdznmy0000logs085del8m' && 
+           (batch.trainerId === 'trainer-demo' || 
+            batch.trainerId === 'cm8vdznmy0000logs085del8m'))
+      }));
       
-      // Store the batches in localStorage for client-side access
-      // On the server, set a flag to store in localStorage on the client
       return NextResponse.json({ 
-        batches, 
+        batches: trainerBatches,
         userId,
-        userRole,
-        storeInLocalStorage: true 
+        userRole
       });
     }
 
     // For admins and other roles, return all batches
-    return NextResponse.json({ batches });
+    return NextResponse.json({ batches: allBatches });
   } catch (error) {
     console.error("Error in batches API:", error);
     return NextResponse.json(
@@ -113,10 +154,16 @@ export async function POST(request: Request) {
       data.status = "PENDING";
     }
     
-    // Store in localStorage (handled on client side)
+    // Add to our server-side storage
+    DYNAMIC_BATCHES.push(data);
+    
+    // Also add to RECENT_BATCHES for persistence across requests
+    RECENT_BATCHES.push(data);
+    
     return NextResponse.json({ 
-      batch: data, 
-      storeInLocalStorage: true 
+      batch: data,
+      message: "Batch created successfully",
+      success: true
     });
   } catch (error) {
     console.error("Error in batches API:", error);

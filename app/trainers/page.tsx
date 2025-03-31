@@ -52,7 +52,9 @@ export default function TrainersPage() {
           let batchesData = [];
           
           if (batchesResponse.ok) {
-            batchesData = await batchesResponse.json();
+            const response = await batchesResponse.json();
+            // Ensure batchesData is an array
+            batchesData = Array.isArray(response) ? response : [];
           }
           
           // Process each trainer to add the assigned batches count

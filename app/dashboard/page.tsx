@@ -10,10 +10,11 @@ interface DashboardCardProps {
   title: string;
   description: string;
   link: string;
-  count: number;
+  count?: number;
+  badge?: number;
 }
 
-const DashboardCard = ({ title, description, link, count }: DashboardCardProps) => {
+const DashboardCard = ({ title, description, link, count, badge }: DashboardCardProps) => {
   const router = useRouter();
   
   return (
@@ -22,9 +23,16 @@ const DashboardCard = ({ title, description, link, count }: DashboardCardProps) 
       onClick={() => router.push(link)}
     >
       <div className="flex justify-between items-start mb-4">
-        <h3 className="font-semibold text-lg text-gray-800">{title}</h3>
+        <div className="flex items-center space-x-2">
+          <h3 className="font-semibold text-lg text-gray-800">{title}</h3>
+          {badge && badge > 0 ? (
+            <span className="bg-red-500 text-white text-xs font-semibold px-2 py-1 rounded-full">
+              {badge}
+            </span>
+          ) : null}
+        </div>
         <span className="bg-blue-100 text-blue-800 text-xs font-semibold px-2.5 py-0.5 rounded">
-          {count}
+          {count || 0}
         </span>
       </div>
       <p className="text-gray-700 text-sm">{description}</p>
@@ -35,12 +43,31 @@ const DashboardCard = ({ title, description, link, count }: DashboardCardProps) 
 export default function DashboardPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
+  const [notificationCount, setNotificationCount] = useState(0);
   
   useEffect(() => {
     if (status === "unauthenticated") {
       router.push("/login");
     }
-  }, [status, router]);
+    
+    if (status === "authenticated" && session?.user?.role === "ADMIN") {
+      setNotificationCount(getUnreadNotificationsCount());
+    }
+  }, [status, router, session]);
+
+  // Get unread notifications count from localStorage
+  function getUnreadNotificationsCount() {
+    if (typeof window === 'undefined') return 0;
+    
+    try {
+      const storedNotifications = localStorage.getItem('verity-notifications') || "[]";
+      const notifications = JSON.parse(storedNotifications);
+      return notifications.filter((n: any) => n.status === "UNREAD").length;
+    } catch (error) {
+      console.error("Error reading notifications:", error);
+      return 0;
+    }
+  }
 
   if (status === "loading") {
     return (
@@ -51,20 +78,9 @@ export default function DashboardPage() {
   }
 
   const renderRoleBasedContent = () => {
-    // Debug console logs to check the role
-    console.log("User session:", session);
-    console.log("User role:", session?.user?.role);
-    console.log("Is admin check:", session?.user?.role === "ADMIN");
-    
     if (!session?.user?.role) return null;
 
-    // Try a case-insensitive comparison
     const userRole = String(session.user.role).toUpperCase();
-    console.log("User role (uppercase):", userRole);
-    
-    // Check exact role value to help debugging
-    console.log("Role type:", typeof session.user.role);
-    console.log("Role value exact:", JSON.stringify(session.user.role));
     
     switch (userRole) {
       case "ADMIN":
@@ -96,6 +112,13 @@ export default function DashboardPage() {
                 link="/purchase-orders"
                 count={0}
               />
+              <DashboardCard
+                title="Notifications"
+                description="View trainer responses and system notifications"
+                link="/admin/notifications"
+                count={0}
+                badge={notificationCount}
+              />
             </div>
           </div>
         );
@@ -108,6 +131,18 @@ export default function DashboardPage() {
                 title="My Assignments"
                 description="View your assigned training batches"
                 link="/trainer/assignments"
+                count={0}
+              />
+              <DashboardCard
+                title="My Batches"
+                description="View your accepted batches"
+                link="/trainer/batches"
+                count={0}
+              />
+              <DashboardCard
+                title="Student Attendance"
+                description="Manage student attendance for your batches"
+                link="/trainer/students"
                 count={0}
               />
               <DashboardCard

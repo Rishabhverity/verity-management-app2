@@ -1,37 +1,42 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Badge } from "@/components/ui/badge";
+import Link from "next/link";
+import toast from "react-hot-toast";
 import { Button } from "@/components/ui/button";
-import { Separator } from "@/components/ui/separator";
-import { Check, X, RefreshCcw } from "lucide-react";
-import { toast } from "react-hot-toast";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 
-type TrainingType = "ONLINE" | "OFFLINE";
-type AssignmentStatus = "PENDING" | "ACCEPTED" | "REJECTED" | "COMPLETED";
+interface TrainingType {
+  id: string;
+  name: string;
+}
 
-// Updated Assignment type
-type Assignment = {
+interface Batch {
   id: string;
   batchName: string;
+  trainees?: { id: string; name: string; email?: string }[];
   startDate: Date;
   endDate: Date;
-  trainingType: TrainingType;
-  meetingLink?: string | null;
-  venue?: string | null;
-  accommodation?: string | null;
-  travel?: string | null;
-  status: AssignmentStatus;
-  traineeCount: number;
-  trainerId?: string;
-  trainerName?: string;
-};
+  trainerId: string;
+  trainingType: string;
+  status: string;
+  isAssignedToCurrentTrainer?: boolean;
+}
 
-// For admin notifications
-type Notification = {
+interface AcceptedAssignment {
+  batchId: string;
+  trainerId: string;
+  trainerName: string;
+  status: 'ACCEPTED' | 'DECLINED';
+  timestamp: number;
+  declineReason?: string;
+}
+
+interface Notification {
   id: string;
   batchId: string;
   batchName: string;
@@ -40,572 +45,347 @@ type Notification = {
   message: string;
   status: "UNREAD" | "READ";
   createdAt: Date;
-};
+}
 
-// Mock data for testing if no assignments are found
-const MOCK_ASSIGNMENTS: Assignment[] = [
-  {
-    id: "java-batch-demo",
-    batchName: "Java Training",
-    startDate: new Date("2025-04-01"),
-    endDate: new Date("2025-04-01"),
-    trainingType: "OFFLINE",
-    venue: "bangalore, building no 5 near satya metro station",
-    accommodation: "demo hotel",
-    travel: "train no.987700, new delhi station",
-    status: "PENDING",
-    traineeCount: 10
-  },
-  {
-    id: "backend-dev-demo",
-    batchName: "Backend Development",
-    startDate: new Date("2025-04-02"),
-    endDate: new Date("2025-04-02"),
-    trainingType: "ONLINE",
-    meetingLink: "https://example.com/meeting",
-    status: "PENDING",
-    traineeCount: 11
-  }
-];
-
-export default function TrainerAssignmentsPage() {
-  const { data: session, status: sessionStatus } = useSession();
-  const [assignments, setAssignments] = useState<Assignment[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [usingLocalStorage, setUsingLocalStorage] = useState(false);
-  const [filter, setFilter] = useState<AssignmentStatus | "ALL">("ALL");
-  const [showSuccessMessage, setShowSuccessMessage] = useState<string | null>(null);
-  const [useMockData, setUseMockData] = useState(false);
+const TrainerAssignmentsPage: React.FC = () => {
+  const { data: session, status } = useSession();
+  const [batches, setBatches] = useState<Batch[]>([]);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [declineDialogOpen, setDeclineDialogOpen] = useState<boolean>(false);
+  const [selectedBatch, setSelectedBatch] = useState<Batch | null>(null);
+  const [declineReason, setDeclineReason] = useState<string>("");
+  const [acceptedAssignments, setAcceptedAssignments] = useState<AcceptedAssignment[]>([]);
 
   useEffect(() => {
-    if (sessionStatus === "loading") return;
-    if (!session) {
-      setError("You must be logged in to view your assignments");
-      setIsLoading(false);
-      return;
+    if (status === "authenticated" && session?.user?.id) {
+      fetchAssignedBatches();
+      // Load accepted assignments from localStorage
+      const savedAssignments = getAcceptedAssignments();
+      setAcceptedAssignments(savedAssignments);
     }
+  }, [status, session]);
 
-    fetchAssignedBatches();
-  }, [session, sessionStatus]);
-
-  async function fetchAssignedBatches() {
-    setIsLoading(true);
-    setError(null);
-    setUseMockData(false); // Reset mock data flag
-    
+  const fetchAssignedBatches = async () => {
+    setLoading(true);
     try {
-      console.log("Session user:", session?.user);
-      console.log("User ID:", session?.user?.id);
-      console.log("User role:", session?.user?.role);
-
-      // Always use mock data first for debugging the UI
-      console.log("Setting mock data for UI testing");
-      setAssignments(MOCK_ASSIGNMENTS);
-      setUseMockData(true);
-      setIsLoading(false);
-      
-      // Fetch batches from API in parallel
-      console.log("Fetching batches from API...");
-      const response = await fetch('/api/batches');
+      const response = await fetch("/api/batches");
       
       if (!response.ok) {
-        console.error("API response not OK:", response.status, response.statusText);
-        throw new Error(`Failed to fetch batches: ${response.status} ${response.statusText}`);
+        throw new Error(`Failed to fetch batches: ${response.status}`);
       }
       
-      const batchesFromApi = await response.json();
-      console.log("Batches fetched from API:", batchesFromApi);
+      const data = await response.json();
       
-      if (batchesFromApi && batchesFromApi.length > 0) {
-        console.log(`Found ${batchesFromApi.length} batches from API`);
-        
-        // Filter batches for this trainer if not already filtered by API
-        const userId = session?.user?.id;
-        let trainerBatches = batchesFromApi;
-        
-        if (userId) {
-          trainerBatches = batchesFromApi.filter((batch: any) => {
-            if (!batch.trainerId) return false;
-            return String(batch.trainerId).toLowerCase() === String(userId).toLowerCase();
-          });
-        }
-        
-        // Parse dates for the batches from API and ensure PENDING status for unprocessed assignments
-        const parsedBatches = trainerBatches.map((batch: any) => ({
-          ...batch,
-          startDate: new Date(batch.startDate),
-          endDate: new Date(batch.endDate),
-          startTime: batch.startTime ? new Date(batch.startTime) : null,
-          endTime: batch.endTime ? new Date(batch.endTime) : null,
-          // Make sure newly assigned batches start with PENDING status if no status exists
-          status: batch.status || batch.assignmentStatus || "PENDING",
-        }));
-        
-        if (parsedBatches.length > 0) {
-          // Only replace mock data if we found real batches
-          setAssignments(parsedBatches);
-          setUsingLocalStorage(false);
-          setUseMockData(false);
-          console.log("Using real data from API");
-        } else {
-          console.log("No batches found for this trainer, keeping mock data");
-        }
-      } else {
-        console.log("No batches found in API response, keeping mock data");
-      }
+      // Filter for batches assigned to this trainer
+      const assignedBatches = data.batches.filter(
+        (batch: Batch) => batch.isAssignedToCurrentTrainer
+      );
+      
+      console.log("Assigned batches:", assignedBatches);
+      
+      // Get accepted assignments from localStorage
+      const savedAssignments = getAcceptedAssignments();
+      console.log("Saved assignments:", savedAssignments);
+      
+      setBatches(assignedBatches);
     } catch (error) {
       console.error("Error fetching batches:", error);
-      setError("Failed to load your assigned batches. Using demo data for now.");
+      toast.error("Failed to load assigned batches");
+    } finally {
+      setLoading(false);
     }
-  }
+  };
 
-  function fallbackToLocalStorage() {
+  const getAcceptedAssignments = (): AcceptedAssignment[] => {
     try {
-      console.log("Attempting to use localStorage as fallback");
-      const storedBatches = localStorage.getItem('verity-batches');
+      if (typeof window === 'undefined') return [];
       
-      if (storedBatches) {
-        const allBatches = JSON.parse(storedBatches);
-        console.log("All batches from localStorage:", allBatches);
-        
-        const userId = session?.user?.id;
-        console.log("Current user ID for filtering:", userId);
-        
-        if (!userId) {
-          console.error("No user ID found in session");
-          setAssignments(MOCK_ASSIGNMENTS);
-          setUseMockData(true);
-          return;
-        }
-        
-        // Filter batches assigned to this trainer
-        const trainerBatches = allBatches.filter((batch: any) => {
-          if (!batch.trainerId) {
-            console.log(`Batch ${batch.id} has no trainerId, skipping`);
-            return false;
-          }
-          
-          const batchTrainerId = String(batch.trainerId).toLowerCase();
-          const sessionUserId = String(userId).toLowerCase();
-          
-          console.log(`Comparing batch.trainerId (${batchTrainerId}) with userId (${sessionUserId})`);
-          const isMatch = batchTrainerId === sessionUserId;
-          console.log(`Match for batch ${batch.id}: ${isMatch}`);
-          
-          return isMatch;
-        });
-        
-        console.log(`Found ${trainerBatches.length} batches assigned to trainer in localStorage`);
-        
-        if (trainerBatches.length > 0) {
-          // Parse dates and ensure PENDING status for unprocessed assignments
-          const parsedBatches = trainerBatches.map((batch: any) => ({
-            ...batch,
-            startDate: new Date(batch.startDate),
-            endDate: new Date(batch.endDate),
-            startTime: batch.startTime ? new Date(batch.startTime) : null,
-            endTime: batch.endTime ? new Date(batch.endTime) : null,
-            // Make sure newly assigned batches start with PENDING status
-            status: batch.status || batch.assignmentStatus || "PENDING",
-          }));
-          
-          setAssignments(parsedBatches);
-          setUsingLocalStorage(true);
-          setUseMockData(false);
-        } else {
-          console.log("No batches found for this trainer in localStorage, using mock data for testing");
-          setAssignments(MOCK_ASSIGNMENTS);
-          setUseMockData(true);
-        }
+      const saved = localStorage.getItem('trainer-assignments');
+      if (!saved) return [];
+      
+      const assignments = JSON.parse(saved);
+      // Filter for assignments by this trainer
+      return assignments.filter(
+        (assignment: AcceptedAssignment) => 
+          assignment.trainerId === session?.user?.id
+      );
+    } catch (error) {
+      console.error("Error parsing stored assignments:", error);
+      return [];
+    }
+  };
+
+  const handleDeclineClick = (batch: Batch) => {
+    setSelectedBatch(batch);
+    setDeclineReason("");
+    setDeclineDialogOpen(true);
+  };
+
+  const handleDeclineCancel = () => {
+    setSelectedBatch(null);
+    setDeclineReason("");
+    setDeclineDialogOpen(false);
+  };
+
+  const handleDeclineSubmit = () => {
+    if (!selectedBatch) return;
+    
+    if (!declineReason.trim()) {
+      toast.error("Please provide a reason for declining");
+      return;
+    }
+    
+    handleStatusChange(selectedBatch, 'DECLINED', declineReason);
+    setDeclineDialogOpen(false);
+    setDeclineReason("");
+    setSelectedBatch(null);
+  };
+
+  const handleStatusChange = async (batch: Batch, status: 'ACCEPTED' | 'DECLINED', reason?: string) => {
+    try {
+      // In a real app, you would call an API to update the status
+      // For demo purposes, we'll just update the UI and localStorage
+      console.log(`Training ${batch.batchName} ${status.toLowerCase()}`);
+      
+      // Create a copy of the batches with the updated status
+      const updatedBatches = batches.map(b => 
+        b.id === batch.id 
+          ? { ...b, status: status } 
+          : b
+      );
+      
+      setBatches(updatedBatches);
+      
+      // Save to localStorage
+      saveAcceptedAssignment(batch, status, reason);
+      
+      if (status === 'ACCEPTED') {
+        toast.success(`Training "${batch.batchName}" accepted successfully`);
       } else {
-        console.log("No batches found in localStorage, using mock data for testing");
-        setAssignments(MOCK_ASSIGNMENTS);
-        setUseMockData(true);
+        toast.success(`Training "${batch.batchName}" declined successfully`);
+        // Create notification for admin
+        createNotification(batch, reason || "No reason provided");
       }
     } catch (error) {
-      console.error("Error reading from localStorage:", error);
-      console.log("Using mock data due to error");
-      setAssignments(MOCK_ASSIGNMENTS);
-      setUseMockData(true);
+      console.error(`Error ${status.toLowerCase()} training:`, error);
+      toast.error(`Failed to ${status.toLowerCase()} training`);
     }
-  }
+  };
 
-  // Create a notification for admin when a trainer rejects a batch
-  const createNotification = (assignment: Assignment, reason: string = "No reason provided") => {
+  const saveAcceptedAssignment = (batch: Batch, status: 'ACCEPTED' | 'DECLINED', reason?: string) => {
     try {
-      // Create notification object
-      const notification: Notification = {
-        id: `notification-${Date.now()}`,
-        batchId: assignment.id,
-        batchName: assignment.batchName,
+      // Get existing assignments from localStorage
+      const existingData = localStorage.getItem('trainer-assignments') || "[]";
+      const assignments: AcceptedAssignment[] = JSON.parse(existingData);
+      
+      // Create a new assignment
+      const assignment: AcceptedAssignment = {
+        batchId: batch.id,
         trainerId: session?.user?.id || "",
-        trainerName: session?.user?.name || "Unknown Trainer",
-        message: `Trainer has rejected the batch: ${reason}`,
+        trainerName: session?.user?.name || "Trainer",
+        status,
+        timestamp: Date.now(),
+        declineReason: reason
+      };
+      
+      // Remove any existing assignment for this batch
+      const filteredAssignments = assignments.filter(
+        a => !(a.batchId === batch.id && a.trainerId === session?.user?.id)
+      );
+      
+      // Add the new assignment
+      const updatedAssignments = [...filteredAssignments, assignment];
+      
+      // Save back to localStorage
+      localStorage.setItem('trainer-assignments', JSON.stringify(updatedAssignments));
+      
+      // Update state
+      setAcceptedAssignments(updatedAssignments.filter(
+        a => a.trainerId === session?.user?.id
+      ));
+      
+      console.log("Updated assignments:", updatedAssignments);
+    } catch (error) {
+      console.error("Error saving assignment:", error);
+    }
+  };
+
+  const createNotification = (batch: Batch, reason: string) => {
+    try {
+      // Create a new notification for the admin
+      const notification: Notification = {
+        id: `notification-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
+        batchId: batch.id,
+        batchName: batch.batchName,
+        trainerId: session?.user?.id || "",
+        trainerName: session?.user?.name || "Trainer",
+        message: `Training declined. Reason: ${reason}`,
         status: "UNREAD",
         createdAt: new Date()
       };
       
-      console.log("Creating notification for admin:", notification);
+      // Get existing notifications
+      const existingData = localStorage.getItem('verity-notifications') || "[]";
+      const notifications: Notification[] = JSON.parse(existingData);
       
-      // Store in localStorage for this demo
-      // In a real app, this would be sent to the server
-      const storedNotifications = localStorage.getItem('verity-notifications') || "[]";
-      const notifications = JSON.parse(storedNotifications);
+      // Add the new notification
+      const updatedNotifications = [...notifications, notification];
       
-      notifications.push(notification);
-      localStorage.setItem('verity-notifications', JSON.stringify(notifications));
+      // Save back to localStorage
+      localStorage.setItem('verity-notifications', JSON.stringify(updatedNotifications));
       
-      console.log("Notification stored successfully");
-      return true;
+      console.log("Notification created:", notification);
     } catch (error) {
       console.error("Error creating notification:", error);
-      return false;
     }
   };
 
-  const handleStatusChange = async (batchId: string, newStatus: AssignmentStatus, reason?: string) => {
-    try {
-      // Find the assignment
-      const assignment = assignments.find(batch => batch.id === batchId);
-      if (!assignment) {
-        toast.error("Assignment not found");
-        return;
-      }
-
-      // Create a copy of the assignment with updated status
-      const updatedAssignment = {
-        ...assignment,
-        status: newStatus,
-        reasonForRejection: newStatus === "REJECTED" ? reason : undefined,
-        trainerName: session?.user?.name || "Unknown Trainer"
-      };
-
-      // Update the assignment in the batches array
-      const updatedBatches = assignments.map(batch => 
-        batch.id === batchId ? updatedAssignment : batch
-      );
-
-      // Update state
-      setAssignments(updatedBatches);
-      
-      // If rejected, create a notification
-      if (newStatus === "REJECTED") {
-        createNotification(assignment, reason || "No reason provided");
-        
-        setShowSuccessMessage(`Admin has been notified that you've declined the training assignment.`);
-      } else if (newStatus === "ACCEPTED") {
-        setShowSuccessMessage(`You have accepted the training assignment.`);
-        
-        // Save to trainer-assignments in localStorage
-        saveAcceptedAssignment(updatedAssignment);
-      }
-
-      // Persist to localStorage
-      try {
-        let storedBatches = [];
-        const existingBatches = localStorage.getItem('verity-batches');
-        
-        if (existingBatches) {
-          storedBatches = JSON.parse(existingBatches);
-          
-          // Update the batch in localStorage
-          storedBatches = storedBatches.map((batch: any) => 
-            batch.id === batchId 
-              ? { ...batch, status: newStatus, assignmentStatus: newStatus } 
-              : batch
-          );
-        } else {
-          // If no batches in localStorage, use current state
-          storedBatches = updatedBatches;
-        }
-        
-        localStorage.setItem('verity-batches', JSON.stringify(storedBatches));
-        console.log(`Assignment status updated to ${newStatus} and saved to localStorage`);
-      } catch (error) {
-        console.error("Error saving to localStorage:", error);
-      }
-    } catch (error) {
-      console.error("Error updating assignment status:", error);
-      toast.error("Failed to update assignment status");
+  const getBatchStatus = (batch: Batch): string => {
+    const assignment = acceptedAssignments.find(
+      a => a.batchId === batch.id && a.trainerId === session?.user?.id
+    );
+    
+    if (assignment) {
+      return assignment.status;
     }
+    
+    return "PENDING";
   };
 
-  // Save accepted assignment to localStorage for access in students page
-  const saveAcceptedAssignment = (assignment: any) => {
-    try {
-      // Get existing assignments
-      const existingAssignmentsStr = localStorage.getItem('trainer-assignments');
-      let assignments = [];
-      
-      if (existingAssignmentsStr) {
-        assignments = JSON.parse(existingAssignmentsStr);
-      }
-      
-      // Check if assignment already exists
-      const assignmentExists = assignments.some((a: any) => a.id === assignment.id);
-      
-      if (!assignmentExists) {
-        // Add new assignment
-        assignments.push({
-          ...assignment,
-          trainerId: session?.user?.id,
-          trainerName: session?.user?.name || "Unknown Trainer",
-          acceptedDate: new Date()
-        });
-        
-        // Save back to localStorage
-        localStorage.setItem('trainer-assignments', JSON.stringify(assignments));
-        console.log("Accepted assignment saved to localStorage:", assignment.id);
-      } else {
-        // Update existing assignment
-        assignments = assignments.map((a: any) => 
-          a.id === assignment.id 
-            ? {
-                ...a,
-                ...assignment,
-                trainerId: session?.user?.id,
-                trainerName: session?.user?.name || "Unknown Trainer",
-                acceptedDate: new Date()
-              } 
-            : a
-        );
-        
-        // Save back to localStorage
-        localStorage.setItem('trainer-assignments', JSON.stringify(assignments));
-        console.log("Accepted assignment updated in localStorage:", assignment.id);
-      }
-    } catch (error) {
-      console.error("Error saving accepted assignment:", error);
-    }
-  };
+  if (status === "loading" || loading) {
+    return (
+      <div className="p-4">
+        <h1 className="text-2xl font-bold mb-4">Trainer Assignments</h1>
+        <div className="text-center py-10">Loading assignments...</div>
+      </div>
+    );
+  }
 
-  const formatDate = (date: Date) => {
-    return date.toLocaleDateString('en-US', { 
-      year: 'numeric', 
-      month: 'long', 
-      day: 'numeric' 
-    });
-  };
-
-  const getStatusVariant = (status: AssignmentStatus) => {
-    switch(status) {
-      case "ACCEPTED": return "success";
-      case "REJECTED": return "destructive";
-      case "COMPLETED": return "default";
-      case "PENDING": return "outline";
-      default: return "secondary";
-    }
-  };
-
-  const filteredAssignments = filter === "ALL" 
-    ? assignments 
-    : assignments.filter(a => a.status === filter);
+  if (status !== "authenticated") {
+    return (
+      <div className="p-4">
+        <h1 className="text-2xl font-bold mb-4">Trainer Assignments</h1>
+        <div className="bg-red-100 p-4 rounded">
+          Please log in to view your assignments
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className="space-y-6 p-4">
-      <div className="flex justify-between items-center">
-        <h1 className="text-2xl font-bold">Training Assignment Requests</h1>
-        <Button onClick={fetchAssignedBatches} variant="outline" className="gap-2">
-          <RefreshCcw className="h-4 w-4" />
-          Refresh
-        </Button>
-      </div>
-
-      {showSuccessMessage && (
-        <Alert className="bg-green-50 text-green-800 border-green-200">
-          <AlertDescription>{showSuccessMessage}</AlertDescription>
-        </Alert>
-      )}
+    <div className="p-4">
+      <h1 className="text-2xl font-bold mb-4">Training Assignments</h1>
       
-      {useMockData && (
-        <Alert className="bg-amber-50 text-amber-800 border-amber-200">
-          <AlertDescription>
-            Using demonstration data for testing. In a real environment, you would see your actual assigned batches.
-          </AlertDescription>
-        </Alert>
-      )}
-
-      {error && (
-        <Alert variant="destructive">
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
-      )}
-
-      <div className="flex gap-2 flex-wrap">
-        <Button 
-          onClick={() => setFilter("ALL")} 
-          variant={filter === "ALL" ? "default" : "outline"}
-        >
-          All
-        </Button>
-        <Button 
-          onClick={() => setFilter("PENDING")} 
-          variant={filter === "PENDING" ? "default" : "outline"}
-        >
-          Pending
-        </Button>
-        <Button 
-          onClick={() => setFilter("ACCEPTED")} 
-          variant={filter === "ACCEPTED" ? "default" : "outline"}
-        >
-          Accepted
-        </Button>
-        <Button 
-          onClick={() => setFilter("REJECTED")} 
-          variant={filter === "REJECTED" ? "default" : "outline"}
-        >
-          Rejected
-        </Button>
-        <Button 
-          onClick={() => setFilter("COMPLETED")} 
-          variant={filter === "COMPLETED" ? "default" : "outline"}
-        >
-          Completed
-        </Button>
-      </div>
-
-      {isLoading ? (
-        <div className="flex justify-center items-center min-h-[300px]">
-          <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent"></div>
-          <span className="ml-2 text-lg">Loading assignments...</span>
-        </div>
-      ) : filteredAssignments.length === 0 ? (
-        <div className="text-center py-10 bg-gray-50 rounded-md">
-          <h2 className="text-xl font-semibold text-gray-700">No assignments found</h2>
-          <p className="text-gray-500 mt-2">
-            {filter !== "ALL" 
-              ? `You don't have any ${filter.toLowerCase()} assignments.` 
-              : "You don't have any training assignments at this time."}
+      {batches.length === 0 ? (
+        <div className="bg-gray-50 p-6 rounded-lg text-center">
+          <h2 className="text-lg font-medium text-gray-700 mb-2">No Assignments</h2>
+          <p className="text-gray-500">
+            You don't have any training assignments at this time
           </p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {filteredAssignments.map((assignment) => (
-            <Card key={assignment.id} className="overflow-hidden">
-              <CardHeader className="pb-2">
-                <div className="flex justify-between items-start">
-                  <CardTitle className="text-lg">{assignment.batchName}</CardTitle>
-                  <Badge variant={getStatusVariant(assignment.status)}>
-                    {assignment.status}
-                  </Badge>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {batches.map((batch) => {
+            const batchStatus = getBatchStatus(batch);
+            
+            return (
+              <div
+                key={batch.id}
+                className="border rounded-lg p-4 bg-white shadow-sm hover:shadow-md transition-shadow"
+              >
+                <h2 className="font-semibold text-lg">{batch.batchName}</h2>
+                
+                <div className="mt-2 text-sm text-gray-600">
+                  <p>
+                    <span className="font-medium">Start Date:</span>{" "}
+                    {new Date(batch.startDate).toLocaleDateString()}
+                  </p>
+                  <p>
+                    <span className="font-medium">End Date:</span>{" "}
+                    {new Date(batch.endDate).toLocaleDateString()}
+                  </p>
+                  <p>
+                    <span className="font-medium">Training Type:</span>{" "}
+                    {batch.trainingType}
+                  </p>
+                  <p>
+                    <span className="font-medium">Students:</span>{" "}
+                    {batch.trainees?.length || 0}
+                  </p>
                 </div>
-                <p className="text-sm text-gray-500">
-                  {formatDate(assignment.startDate)} - {formatDate(assignment.endDate)}
-                </p>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div>
-                  <div className="flex justify-between mb-1">
-                    <span className="font-medium">Type:</span>
-                    <span>{assignment.trainingType}</span>
-                  </div>
-                  
-                  {assignment.trainingType === "ONLINE" && assignment.meetingLink && (
-                    <div className="flex justify-between mb-1">
-                      <span className="font-medium">Meeting Link:</span>
-                      <a 
-                        href={assignment.meetingLink.startsWith("http") ? assignment.meetingLink : "#"} 
-                        className="text-blue-600 hover:underline"
-                        target="_blank" 
-                        rel="noopener noreferrer"
-                      >
-                        Join Meeting
-                      </a>
-                    </div>
-                  )}
-                  
-                  {assignment.trainingType === "OFFLINE" && (
+                
+                <div className="mt-4 space-y-2">
+                  {batchStatus === "PENDING" && (
                     <>
-                      {assignment.venue && (
-                        <div className="flex justify-between mb-1">
-                          <span className="font-medium">Venue:</span>
-                          <span>{assignment.venue}</span>
-                        </div>
-                      )}
+                      <Button
+                        onClick={() => handleStatusChange(batch, "ACCEPTED")}
+                        className="w-full bg-green-600 hover:bg-green-700"
+                      >
+                        Accept Training
+                      </Button>
                       
-                      {assignment.accommodation && (
-                        <div className="flex justify-between mb-1">
-                          <span className="font-medium">Accommodation:</span>
-                          <span>{assignment.accommodation}</span>
-                        </div>
-                      )}
-                      
-                      {assignment.travel && (
-                        <div className="flex justify-between mb-1">
-                          <span className="font-medium">Travel:</span>
-                          <span>{assignment.travel}</span>
-                        </div>
-                      )}
+                      <Button
+                        onClick={() => handleDeclineClick(batch)}
+                        className="w-full bg-red-600 hover:bg-red-700"
+                      >
+                        Decline Training
+                      </Button>
                     </>
                   )}
                   
-                  <div className="flex justify-between mb-1">
-                    <span className="font-medium">Trainees:</span>
-                    <span>{assignment.traineeCount}</span>
-                  </div>
+                  {batchStatus === "ACCEPTED" && (
+                    <div className="bg-green-100 p-3 rounded text-green-800 text-center">
+                      Training Accepted
+                    </div>
+                  )}
+                  
+                  {batchStatus === "DECLINED" && (
+                    <div className="bg-red-100 p-3 rounded text-red-800 text-center">
+                      Training Declined
+                    </div>
+                  )}
                 </div>
-                
-                <Separator />
-                
-                {/* Always show Accept/Decline buttons for PENDING status or for mock data */}
-                {(assignment.status === "PENDING" || useMockData) && (
-                  <div className="flex gap-2">
-                    <Button 
-                      onClick={() => handleStatusChange(assignment.id, "ACCEPTED")}
-                      className="flex-1 bg-green-600 hover:bg-green-700"
-                    >
-                      <Check className="h-4 w-4 mr-1" />
-                      Accept
-                    </Button>
-                    <Button 
-                      onClick={() => {
-                        const reason = prompt("Please provide a reason for rejecting this class:");
-                        if (reason !== null) {
-                          handleStatusChange(assignment.id, "REJECTED", reason);
-                        }
-                      }}
-                      variant="destructive"
-                      className="flex-1"
-                    >
-                      <X className="h-4 w-4 mr-1" />
-                      Decline
-                    </Button>
-                  </div>
-                )}
-                
-                {assignment.status === "ACCEPTED" && !useMockData && (
-                  <div className="text-center">
-                    <div className="text-green-600 font-medium mb-2">You've accepted this training assignment</div>
-                    {assignment.trainingType === "ONLINE" && assignment.meetingLink && (
-                      <Button 
-                        variant="outline" 
-                        className="w-full"
-                        onClick={() => window.open(assignment.meetingLink as string, "_blank")}
-                      >
-                        Join Meeting
-                      </Button>
-                    )}
-                  </div>
-                )}
-                
-                {assignment.status === "REJECTED" && !useMockData && (
-                  <div className="text-center text-gray-500">
-                    You've declined this training assignment. 
-                    The admin has been notified of your decision.
-                  </div>
-                )}
-                
-                {assignment.status === "COMPLETED" && !useMockData && (
-                  <div className="text-center text-green-600 font-medium">
-                    This training has been completed. Thank you!
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          ))}
+              </div>
+            );
+          })}
         </div>
       )}
+      
+      {/* Decline Dialog */}
+      <Dialog open={declineDialogOpen} onOpenChange={setDeclineDialogOpen}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Decline Training Assignment</DialogTitle>
+          </DialogHeader>
+          
+          <div className="py-4">
+            <Label htmlFor="declineReason" className="mb-2 block">
+              Please provide a reason for declining this training:
+            </Label>
+            <Textarea
+              id="declineReason"
+              value={declineReason}
+              onChange={(e) => setDeclineReason(e.target.value)}
+              placeholder="Enter your reason here..."
+              className="min-h-[100px]"
+            />
+          </div>
+          
+          <DialogFooter>
+            <Button variant="outline" onClick={handleDeclineCancel}>
+              Cancel
+            </Button>
+            <Button 
+              onClick={handleDeclineSubmit}
+              className="bg-red-600 hover:bg-red-700"
+            >
+              Submit
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
-} 
+};
+
+export default TrainerAssignmentsPage; 

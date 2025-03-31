@@ -5,6 +5,7 @@ import * as XLSX from 'xlsx';
 interface Trainee {
   id: string;
   name: string;
+  email?: string;
 }
 
 interface TraineeListProps {
@@ -15,11 +16,13 @@ interface TraineeListProps {
 export default function TraineeList({ trainees, onTraineesChange }: TraineeListProps) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [newName, setNewName] = useState("");
+  const [newEmail, setNewEmail] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleEdit = (trainee: Trainee) => {
     setEditingId(trainee.id);
     setNewName(trainee.name);
+    setNewEmail(trainee.email || "");
   };
 
   const handleSave = (e: React.MouseEvent) => {
@@ -27,29 +30,33 @@ export default function TraineeList({ trainees, onTraineesChange }: TraineeListP
     if (!editingId || !newName.trim()) return;
 
     const updatedTrainees = trainees.map(trainee =>
-      trainee.id === editingId ? { ...trainee, name: newName.trim() } : trainee
+      trainee.id === editingId ? { ...trainee, name: newName.trim(), email: newEmail.trim() } : trainee
     );
 
     onTraineesChange(updatedTrainees);
     setEditingId(null);
     setNewName("");
+    setNewEmail("");
   };
 
   const handleCancel = (e: React.MouseEvent) => {
     e.preventDefault(); // Prevent form submission
     setEditingId(null);
     setNewName("");
+    setNewEmail("");
   };
 
   const handleAddTrainee = (e: React.MouseEvent) => {
     e.preventDefault(); // Prevent form submission
     const newTrainee: Trainee = {
       id: `temp-${Date.now()}`,
-      name: "New Trainee",
+      name: "",
+      email: ""
     };
     onTraineesChange([...trainees, newTrainee]);
     setEditingId(newTrainee.id);
     setNewName("New Trainee");
+    setNewEmail("");
   };
 
   const handleDelete = (e: React.MouseEvent, id: string) => {
@@ -75,12 +82,13 @@ export default function TraineeList({ trainees, onTraineesChange }: TraineeListP
         const newTrainees: Trainee[] = jsonData.map((row: any, index: number) => ({
           id: `temp-${Date.now()}-${index}`,
           name: row.name || row.Name || `Trainee ${index + 1}`,
+          email: row.email || row.Email || undefined
         }));
 
         onTraineesChange([...trainees, ...newTrainees]);
       } catch (error) {
         console.error('Error reading Excel file:', error);
-        alert('Error reading Excel file. Please make sure it has a "name" column.');
+        alert('Error reading Excel file. Please make sure it has "name" and "email" columns.');
       }
     };
 
@@ -127,15 +135,23 @@ export default function TraineeList({ trainees, onTraineesChange }: TraineeListP
       
       <div className="space-y-2">
         {trainees.map((trainee) => (
-          <div key={trainee.id} className="flex items-center gap-2">
+          <div
+            key={trainee.id}
+            className="flex items-center gap-2 p-2 border rounded-md"
+          >
             {editingId === trainee.id ? (
               <>
                 <input
                   type="text"
-                  value={newName}
-                  onChange={(e) => setNewName(e.target.value)}
+                  defaultValue={trainee.name}
                   className="flex-1 px-2 py-1 border rounded"
-                  autoFocus
+                  placeholder="Name"
+                />
+                <input
+                  type="email"
+                  defaultValue={trainee.email}
+                  className="flex-1 px-2 py-1 border rounded"
+                  placeholder="Email"
                 />
                 <Button
                   variant="outline"
@@ -154,7 +170,12 @@ export default function TraineeList({ trainees, onTraineesChange }: TraineeListP
               </>
             ) : (
               <>
-                <span className="flex-1">{trainee.name}</span>
+                <div className="flex-1">
+                  <div className="font-medium">{trainee.name}</div>
+                  {trainee.email && (
+                    <div className="text-sm text-gray-500">{trainee.email}</div>
+                  )}
+                </div>
                 <Button
                   variant="outline"
                   size="sm"
@@ -179,7 +200,7 @@ export default function TraineeList({ trainees, onTraineesChange }: TraineeListP
         ))}
       </div>
       <p className="text-xs text-gray-500">
-        Upload an Excel file with a "name" column to add multiple trainees at once
+        Upload an Excel file with a "name" and "email" column to add multiple trainees at once
       </p>
     </div>
   );

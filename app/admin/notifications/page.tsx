@@ -1,16 +1,10 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
-import { useRouter } from "next/navigation";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Separator } from "@/components/ui/separator";
+import Link from "next/link";
 
-// For admin notifications
-type Notification = {
+interface Notification {
   id: string;
   batchId: string;
   batchName: string;
@@ -19,85 +13,72 @@ type Notification = {
   message: string;
   status: "UNREAD" | "READ";
   createdAt: Date;
-};
+}
 
 export default function AdminNotificationsPage() {
-  const { data: session, status: sessionStatus } = useSession();
-  const router = useRouter();
+  const { data: session, status } = useSession();
   const [notifications, setNotifications] = useState<Notification[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (sessionStatus === "loading") return;
-    if (!session) {
-      router.push("/login");
-      return;
+    if (status === "authenticated" && session?.user?.role === "ADMIN") {
+      loadNotifications();
     }
+  }, [status, session]);
 
-    // Check if user is an admin
-    const userRole = session?.user?.role ? String(session.user.role).toUpperCase() : "";
-    if (userRole !== "ADMIN" && userRole !== "OPERATIONS") {
-      router.push("/dashboard");
-      return;
-    }
-
-    fetchNotifications();
-  }, [session, sessionStatus, router]);
-
-  const fetchNotifications = () => {
-    setIsLoading(true);
+  const loadNotifications = () => {
     try {
-      // In a real app, this would fetch from the API
-      // For this demo, we'll use localStorage
+      setLoading(true);
+      // In a production app, this would be an API call
       const storedNotifications = localStorage.getItem('verity-notifications') || "[]";
-      const parsedNotifications = JSON.parse(storedNotifications).map((notification: any) => ({
+      let parsedNotifications = JSON.parse(storedNotifications);
+      
+      // Convert string dates to Date objects
+      parsedNotifications = parsedNotifications.map((notification: any) => ({
         ...notification,
         createdAt: new Date(notification.createdAt)
       }));
       
-      // Sort by most recent first
+      // Sort by creation date (newest first)
       parsedNotifications.sort((a: Notification, b: Notification) => 
-        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+        b.createdAt.getTime() - a.createdAt.getTime()
       );
       
       setNotifications(parsedNotifications);
-      setError(null);
     } catch (error) {
-      console.error("Error fetching notifications:", error);
-      setError("Failed to load notifications");
+      console.error("Error loading notifications:", error);
     } finally {
-      setIsLoading(false);
+      setLoading(false);
     }
   };
 
   const markAsRead = (notificationId: string) => {
     try {
+      // Update in state
       const updatedNotifications = notifications.map(notification => 
         notification.id === notificationId 
           ? { ...notification, status: "READ" as const } 
           : notification
       );
-      
       setNotifications(updatedNotifications);
       
-      // Update localStorage
+      // Update in localStorage
       localStorage.setItem('verity-notifications', JSON.stringify(updatedNotifications));
     } catch (error) {
-      console.error("Error updating notification status:", error);
+      console.error("Error marking notification as read:", error);
     }
   };
 
   const markAllAsRead = () => {
     try {
+      // Update all notifications to READ status
       const updatedNotifications = notifications.map(notification => ({
         ...notification,
         status: "READ" as const
       }));
-      
       setNotifications(updatedNotifications);
       
-      // Update localStorage
+      // Update in localStorage
       localStorage.setItem('verity-notifications', JSON.stringify(updatedNotifications));
     } catch (error) {
       console.error("Error marking all notifications as read:", error);
@@ -106,13 +87,13 @@ export default function AdminNotificationsPage() {
 
   const deleteNotification = (notificationId: string) => {
     try {
+      // Remove from state
       const updatedNotifications = notifications.filter(
         notification => notification.id !== notificationId
       );
-      
       setNotifications(updatedNotifications);
       
-      // Update localStorage
+      // Update in localStorage
       localStorage.setItem('verity-notifications', JSON.stringify(updatedNotifications));
     } catch (error) {
       console.error("Error deleting notification:", error);
@@ -120,7 +101,7 @@ export default function AdminNotificationsPage() {
   };
 
   const formatDate = (date: Date) => {
-    return date.toLocaleDateString('en-US', {
+    return new Date(date).toLocaleString(undefined, {
       year: 'numeric',
       month: 'short',
       day: 'numeric',
@@ -129,100 +110,105 @@ export default function AdminNotificationsPage() {
     });
   };
 
-  const viewBatch = (batchId: string) => {
-    router.push(`/batches?id=${batchId}`);
-  };
-
-  if (isLoading) {
+  if (status === "loading" || loading) {
     return (
-      <div className="flex justify-center items-center min-h-[500px]">
-        <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent"></div>
-        <span className="ml-2 text-lg">Loading notifications...</span>
+      <div className="p-4">
+        <h1 className="text-2xl font-bold mb-4">Notifications</h1>
+        <div className="text-center py-10">Loading notifications...</div>
       </div>
     );
   }
 
-  if (error) {
+  if (status !== "authenticated" || session?.user?.role !== "ADMIN") {
     return (
-      <Alert className="mb-4">
-        <AlertDescription>{error}</AlertDescription>
-      </Alert>
+      <div className="p-4">
+        <h1 className="text-2xl font-bold mb-4">Notifications</h1>
+        <div className="bg-red-100 p-4 rounded mb-4">
+          You need to be logged in as an admin to view notifications
+        </div>
+        <Link href="/login" className="bg-blue-500 hover:bg-blue-600 text-white py-2 px-4 rounded inline-block">
+          Login
+        </Link>
+      </div>
     );
   }
 
   return (
-    <div className="space-y-6 p-4">
-      <div className="flex justify-between items-center">
+    <div className="p-4">
+      <div className="flex justify-between items-center mb-6">
         <h1 className="text-2xl font-bold">Notifications</h1>
-        <div className="flex gap-2">
-          {notifications.length > 0 && (
-            <Button variant="outline" onClick={markAllAsRead}>
-              Mark All as Read
-            </Button>
-          )}
-          <Button onClick={fetchNotifications} variant="outline">
+        
+        <div className="flex space-x-2">
+          <button
+            onClick={loadNotifications}
+            className="bg-gray-200 hover:bg-gray-300 text-gray-800 py-2 px-4 rounded"
+          >
             Refresh
-          </Button>
+          </button>
+          
+          <button
+            onClick={markAllAsRead}
+            className="bg-blue-500 hover:bg-blue-600 text-white py-2 px-4 rounded"
+            disabled={notifications.every(n => n.status === "READ")}
+          >
+            Mark All as Read
+          </button>
         </div>
       </div>
-
+      
       {notifications.length === 0 ? (
-        <div className="text-center py-10 bg-gray-50 rounded-md">
-          <h2 className="text-lg font-semibold text-gray-600">No notifications</h2>
-          <p className="text-gray-500 mt-2">
-            You don't have any notifications at this time.
+        <div className="bg-gray-50 p-6 rounded-lg text-center">
+          <h2 className="text-lg font-medium text-gray-700 mb-2">No Notifications</h2>
+          <p className="text-gray-500">
+            You don't have any notifications at this time
           </p>
         </div>
       ) : (
         <div className="space-y-4">
           {notifications.map((notification) => (
-            <Card 
+            <div 
               key={notification.id} 
-              className={`overflow-hidden ${notification.status === "UNREAD" ? "border-l-4 border-l-blue-500" : ""}`}
+              className={`border rounded-lg p-4 ${
+                notification.status === "UNREAD" 
+                  ? "bg-blue-50 border-blue-200" 
+                  : "bg-white border-gray-200"
+              }`}
             >
-              <CardHeader className="pb-2">
-                <div className="flex justify-between items-start">
-                  <CardTitle className="text-lg">
-                    Batch Declined: {notification.batchName}
-                  </CardTitle>
-                  <Badge variant={notification.status === "UNREAD" ? "default" : "outline"}>
-                    {notification.status}
-                  </Badge>
-                </div>
-                <div className="text-sm text-gray-500">
-                  From: {notification.trainerName} | {formatDate(new Date(notification.createdAt))}
-                </div>
-              </CardHeader>
-              <CardContent>
-                <p className="mb-4">{notification.message}</p>
-                
-                <div className="flex justify-between items-center">
-                  <div className="space-x-2">
-                    <Button 
-                      variant="outline" 
-                      onClick={() => viewBatch(notification.batchId)}
-                    >
-                      View Batch
-                    </Button>
+              <div className="flex justify-between items-start">
+                <div>
+                  <h3 className="font-medium">
                     {notification.status === "UNREAD" && (
-                      <Button 
-                        variant="outline" 
-                        onClick={() => markAsRead(notification.id)}
-                      >
-                        Mark as Read
-                      </Button>
+                      <span className="inline-block w-2 h-2 bg-blue-500 rounded-full mr-2"></span>
                     )}
-                  </div>
-                  <Button 
-                    variant="ghost" 
-                    className="text-red-500 hover:text-red-700"
+                    Training Declined: {notification.batchName}
+                  </h3>
+                  <p className="text-gray-600 mt-1">
+                    Trainer: {notification.trainerName}
+                  </p>
+                  <p className="mt-2">{notification.message}</p>
+                  <p className="text-gray-500 text-sm mt-2">
+                    {formatDate(notification.createdAt)}
+                  </p>
+                </div>
+                
+                <div className="flex space-x-2">
+                  {notification.status === "UNREAD" && (
+                    <button
+                      onClick={() => markAsRead(notification.id)}
+                      className="text-blue-600 hover:text-blue-800"
+                    >
+                      Mark as Read
+                    </button>
+                  )}
+                  <button
                     onClick={() => deleteNotification(notification.id)}
+                    className="text-red-600 hover:text-red-800"
                   >
                     Delete
-                  </Button>
+                  </button>
                 </div>
-              </CardContent>
-            </Card>
+              </div>
+            </div>
           ))}
         </div>
       )}
