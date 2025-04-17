@@ -5,6 +5,7 @@ import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { POStatus, UserRole } from "@prisma/client";
+import { Pagination } from "@/components/ui/pagination";
 
 // Define the PurchaseOrder type
 type PurchaseOrder = {
@@ -60,6 +61,17 @@ export default function PurchaseOrdersPage() {
     clientName: "",
     amount: "",
   });
+  
+  // Pagination and search states
+  const [currentPage, setCurrentPage] = useState(1);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [filterStatus, setFilterStatus] = useState<POStatus | "ALL">("ALL");
+  const itemsPerPage = 5;
+
+  // Reset to first page when search or filter changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, filterStatus]);
 
   useEffect(() => {
     if (status === "unauthenticated") {
@@ -150,6 +162,35 @@ export default function PurchaseOrdersPage() {
     } catch (error) {
       console.error("Error saving to localStorage:", error);
     }
+  };
+
+  // Filter purchase orders by search term and status
+  const filteredPOs = purchaseOrders.filter(po => {
+    // Filter by status
+    const statusMatch = 
+      filterStatus === "ALL" || 
+      po.status === filterStatus;
+    
+    // Filter by search term (case insensitive)
+    const searchTermLower = searchTerm.toLowerCase();
+    const searchMatch = 
+      searchTerm === "" ||
+      po.poNumber.toLowerCase().includes(searchTermLower) ||
+      po.clientName.toLowerCase().includes(searchTermLower);
+    
+    return statusMatch && searchMatch;
+  });
+
+  // Paginate the filtered purchase orders
+  const totalPages = Math.ceil(filteredPOs.length / itemsPerPage);
+  const paginatedPOs = filteredPOs.slice(
+    (currentPage - 1) * itemsPerPage,
+    currentPage * itemsPerPage
+  );
+
+  // Handle pagination
+  const handlePageChange = (page: number) => {
+    setCurrentPage(page);
   };
 
   if (status === "loading" || isLoading) {
@@ -258,9 +299,53 @@ export default function PurchaseOrdersPage() {
         </div>
       )}
 
-      {purchaseOrders.length === 0 ? (
+      {/* Search and filter controls */}
+      <div className="mb-6 space-y-4">
+        <div className="flex flex-wrap gap-2">
+          <Button 
+            variant={filterStatus === "ALL" ? "default" : "outline"}
+            onClick={() => setFilterStatus("ALL")}
+          >
+            All
+          </Button>
+          <Button 
+            variant={filterStatus === "PENDING" ? "default" : "outline"}
+            onClick={() => setFilterStatus("PENDING")}
+          >
+            Pending
+          </Button>
+          <Button 
+            variant={filterStatus === "PROCESSED" ? "default" : "outline"}
+            onClick={() => setFilterStatus("PROCESSED")}
+          >
+            Processed
+          </Button>
+          <Button 
+            variant={filterStatus === "INVOICED" ? "default" : "outline"}
+            onClick={() => setFilterStatus("INVOICED")}
+          >
+            Invoiced
+          </Button>
+        </div>
+        
+        <div>
+          <input
+            type="text"
+            placeholder="Search by PO number or client name..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="w-full md:w-96 p-2 border rounded"
+          />
+        </div>
+      </div>
+
+      {filteredPOs.length === 0 ? (
         <div className="bg-white p-6 rounded-lg shadow-md text-center">
-          <p className="text-gray-700 mb-2">No purchase orders found.</p>
+          <p className="text-gray-700 mb-2">
+            {purchaseOrders.length === 0 
+              ? "No purchase orders found." 
+              : "No purchase orders match your search criteria."}
+          </p>
           {canUploadPO && (
             <Button onClick={() => setIsFormOpen(true)}>Upload New PO</Button>
           )}
@@ -296,7 +381,7 @@ export default function PurchaseOrdersPage() {
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
-              {purchaseOrders.map((po) => (
+              {paginatedPOs.map((po) => (
                 <tr key={po.id} className="hover:bg-gray-50">
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                     {po.poNumber}
@@ -359,6 +444,17 @@ export default function PurchaseOrdersPage() {
               ))}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {/* Pagination controls */}
+      {filteredPOs.length > itemsPerPage && (
+        <div className="mt-6">
+          <Pagination
+            currentPage={currentPage}
+            totalPages={totalPages}
+            onPageChange={handlePageChange}
+          />
         </div>
       )}
     </div>
