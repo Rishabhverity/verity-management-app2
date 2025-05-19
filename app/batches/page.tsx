@@ -3,7 +3,6 @@
 import { useState, useEffect } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
-import { TrainingType } from "@prisma/client";
 import { Button } from "@/components/ui/button";
 import BatchForm from "@/components/forms/BatchForm";
 import { Pagination } from "@/components/ui/pagination";
@@ -23,7 +22,7 @@ interface Batch {
   endDate: Date;
   startTime?: Date;
   endTime?: Date;
-  trainingType: TrainingType;
+  trainingType: "ONLINE" | "OFFLINE" | "HYBRID";
   status: BatchStatus;
   traineeCount: number;
   trainerId?: string;

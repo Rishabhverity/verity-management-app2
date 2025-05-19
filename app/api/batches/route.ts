@@ -94,31 +94,75 @@ const DYNAMIC_BATCHES = [];
 export async function GET(request: Request) {
   try {
     const session = await getServerSession(authOptions);
-    const userRole = session?.user?.role;
-    const userId = session?.user?.id;
-
+    const userId = session?.user?.id || null;
+    const userRole = session?.user?.role || "GUEST";
+    
     console.log("API /batches GET - User role:", userRole);
     console.log("API /batches GET - User ID:", userId);
     
     // Create combined batches list from all sources
     const allBatches = [...MOCK_BATCHES, ...RECENT_BATCHES, ...DYNAMIC_BATCHES];
-    console.log("API /batches GET - Found", allBatches.length, "batches for trainer");
+    console.log("API /batches GET - Found", allBatches.length, "total batches");
 
     if (userRole === "TRAINER") {
       // For trainers, mark batches that are assigned to them
-      const trainerBatches = allBatches.map(batch => ({
-        ...batch,
-        isAssignedToCurrentTrainer: 
-          // Match by exact ID
-          batch.trainerId === userId || 
-          // Special handling for demo account
-          (userId === 'cm8vdznmy0000logs085del8m' && 
-           (batch.trainerId === 'trainer-demo' || 
-            batch.trainerId === 'cm8vdznmy0000logs085del8m'))
-      }));
+      const trainerBatches = allBatches.map(batch => {
+        // Check if this batch should be marked as assigned to the current trainer
+        let isAssigned = false;
+        
+        // Match by exact ID
+        if (batch.trainerId === userId) {
+          console.log(`Batch ${batch.id} assigned directly to trainer ${userId}`);
+          isAssigned = true;
+        }
+        // Special handling for demo account 
+        else if (userId === 'cm8vdznmy0000logs085del8m' && 
+                (batch.trainerId === 'trainer-demo')) {
+          console.log(`Batch ${batch.id} assigned to demo trainer`);
+          isAssigned = true;
+        }
+        // For testing - mark all batches as assigned if they have no trainer
+        else if (!batch.trainerId || batch.trainerId === '') {
+          console.log(`Batch ${batch.id} has no trainer assigned, making available to all trainers`);
+          isAssigned = true;
+        }
+        // If trainerId looks like an email, match by user email
+        else if (batch.trainerId && batch.trainerId.includes('@') && session?.user?.email === batch.trainerId) {
+          console.log(`Batch ${batch.id} assigned to trainer by email ${batch.trainerId}`);
+          isAssigned = true;
+        }
+        
+        // Ensure we return the complete batch with trainees data
+        return {
+          ...batch,
+          isAssignedToCurrentTrainer: isAssigned,
+          trainees: batch.trainees || []  // Ensure trainees array is always included
+        };
+      });
+      
+      // Further filter to ensure no duplicate batches
+      const uniqueBatchIds = new Set();
+      const filteredBatches = trainerBatches.filter(batch => {
+        if (batch.isAssignedToCurrentTrainer) {
+          if (uniqueBatchIds.has(batch.id)) {
+            // This is a duplicate ID, skip it
+            return false;
+          }
+          // Add this batch ID to our set
+          uniqueBatchIds.add(batch.id);
+          return true;
+        }
+        return batch.isAssignedToCurrentTrainer;
+      });
+      
+      // Debug log to check what batches are being returned
+      console.log(`API /batches GET - Returning ${filteredBatches.length} batches for trainer ${userId}`);
+      filteredBatches.forEach(batch => {
+        console.log(`  - Batch: ${batch.id}, ${batch.batchName}, Trainees: ${batch.trainees?.length || 0}`);
+      });
       
       return NextResponse.json({ 
-        batches: trainerBatches,
+        batches: filteredBatches,
         userId,
         userRole
       });
@@ -143,6 +187,7 @@ export async function POST(request: Request) {
     }
 
     const data = await request.json();
+    console.log("Received batch creation request:", data);
     
     // Generate ID if not provided
     if (!data.id) {
@@ -154,11 +199,52 @@ export async function POST(request: Request) {
       data.status = "PENDING";
     }
     
+    // Ensure dates are properly formatted as Date objects
+    if (data.startDate && typeof data.startDate === 'string') {
+      data.startDate = new Date(data.startDate);
+    }
+    
+    if (data.endDate && typeof data.endDate === 'string') {
+      data.endDate = new Date(data.endDate);
+    }
+    
+    // Validate trainer info
+    console.log(`Trainer info - ID: ${data.trainerId}, Name: ${data.trainerName}, Email: ${data.trainerEmail || 'Not provided'}`);
+    
+    // Ensure trainerEmail is stored if available
+    if (!data.trainerEmail && data.trainerId) {
+      console.log("No trainer email provided, will use ID only for matching");
+    }
+    
+    // Ensure trainees are properly formatted
+    if (data.trainees && Array.isArray(data.trainees)) {
+      // Make sure each trainee has required fields
+      data.trainees = data.trainees.map((trainee: any, index: number) => ({
+        id: trainee.id || `student-${Date.now()}-${index}`,
+        name: trainee.name || 'Student',
+        email: trainee.email || null,
+      }));
+      
+      // Update traineeCount
+      data.traineeCount = data.trainees.length;
+    } else {
+      // Initialize empty trainees array if not present
+      data.trainees = [];
+      data.traineeCount = 0;
+    }
+    
     // Add to our server-side storage
     DYNAMIC_BATCHES.push(data);
     
     // Also add to RECENT_BATCHES for persistence across requests
     RECENT_BATCHES.push(data);
+    
+    console.log(`Created new batch "${data.batchName}" (ID: ${data.id}) with ${data.traineeCount} trainees`);
+    console.log(`Assigned to trainer: ${data.trainerId} (${data.trainerName})`);
+    
+    // Debug info about all batches
+    const allBatches = [...MOCK_BATCHES, ...RECENT_BATCHES, ...DYNAMIC_BATCHES];
+    console.log(`Total batches in system: ${allBatches.length}`);
     
     return NextResponse.json({ 
       batch: data,

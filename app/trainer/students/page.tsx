@@ -10,7 +10,7 @@ import { Pagination } from "@/components/ui/pagination";
 interface Student {
   id: string;
   name: string;
-  email?: string;
+  email?: string | null;
   present?: boolean;
 }
 
@@ -21,7 +21,7 @@ interface Batch {
   startDate: Date;
   endDate: Date;
   trainerId: string;
-  trainingType: string;
+  trainingType: "ONLINE" | "OFFLINE" | "HYBRID";
   status: string;
   isAssignedToCurrentTrainer?: boolean;
 }
@@ -76,14 +76,27 @@ export default function TrainerStudentsPage() {
       const selectedBatch = batches.find(batch => batch.id === selectedBatchId);
       
       if (selectedBatch?.trainees) {
-        // Initialize students with attendance status
-        const studentsWithAttendance = selectedBatch.trainees.map(student => ({
-          ...student,
+        console.log("Found trainees for selected batch:", selectedBatch.trainees);
+        
+        // Check if trainees have proper data structure
+        if (selectedBatch.trainees.length > 0) {
+          console.log("First trainee data:", selectedBatch.trainees[0]);
+        } else {
+          console.log("Trainees array is empty");
+        }
+        
+        // Initialize students with attendance status and ensure all required fields
+        const studentsWithAttendance = selectedBatch.trainees.map((student, index) => ({
+          id: student.id || `generated-id-${Date.now()}-${index}`,
+          name: student.name || `Student ${index + 1}`,
+          email: student.email || null,
           present: false
         }));
         
+        console.log("Processed student data:", studentsWithAttendance);
         setStudents(studentsWithAttendance);
       } else {
+        console.warn("No trainees found for batch:", selectedBatchId);
         setStudents([]);
       }
       
@@ -116,22 +129,76 @@ export default function TrainerStudentsPage() {
         return;
       }
       
+      console.log("Fetched all batches:", data.batches);
+      
       // Get accepted assignments from localStorage
       const acceptedAssignments = getAcceptedAssignments();
+      console.log("Accepted assignments:", acceptedAssignments);
+      
       const acceptedBatchIds = acceptedAssignments
         .filter(a => a.status === 'ACCEPTED')
         .map(a => a.batchId);
       
+      console.log("Accepted batch IDs:", acceptedBatchIds);
+      
+      // Also check for saved batches in localStorage (these will have complete data)
+      let localBatches: Batch[] = [];
+      try {
+        const savedBatchesJson = localStorage.getItem('trainer-batches');
+        if (savedBatchesJson) {
+          localBatches = JSON.parse(savedBatchesJson);
+          console.log("Found locally saved batches:", localBatches);
+        }
+      } catch (e) {
+        console.error("Error reading saved batches:", e);
+      }
+      
       // Filter batches to show only those assigned to this trainer and accepted
-      const trainerBatches = data.batches.filter(batch => 
-        batch.isAssignedToCurrentTrainer && acceptedBatchIds.includes(batch.id)
-      );
+      let trainerBatches = data.batches.filter((batch: Batch) => {
+        const isAssigned = batch.isAssignedToCurrentTrainer;
+        const isAccepted = acceptedBatchIds.includes(batch.id);
+        
+        console.log(`Batch ${batch.id} - ${batch.batchName}: assigned=${isAssigned}, accepted=${isAccepted}, trainees=${batch.trainees?.length || 0}`);
+        
+        return isAssigned && isAccepted;
+      });
+      
+      // For each batch in trainerBatches, check if we have more complete data in localBatches
+      trainerBatches = trainerBatches.map((apiBatch: Batch) => {
+        const localBatch = localBatches.find(lb => lb.id === apiBatch.id);
+        if (localBatch && (!apiBatch.trainees || apiBatch.trainees.length === 0) && localBatch.trainees && localBatch.trainees.length > 0) {
+          console.log(`Using local data for batch ${apiBatch.id} which has ${localBatch.trainees.length} trainees`);
+          return {
+            ...apiBatch,
+            trainees: localBatch.trainees
+          };
+        }
+        return apiBatch;
+      });
+      
+      // If we're missing any accepted batches in the API response, add them from local storage
+      const apiBatchIds = trainerBatches.map((b: Batch) => b.id);
+      const missingAcceptedBatches = acceptedBatchIds.filter(id => !apiBatchIds.includes(id));
+      
+      if (missingAcceptedBatches.length > 0) {
+        console.log("Some accepted batches are missing from API response:", missingAcceptedBatches);
+        
+        missingAcceptedBatches.forEach(missingId => {
+          const localBatch = localBatches.find(lb => lb.id === missingId);
+          if (localBatch) {
+            console.log(`Adding missing batch from local storage: ${localBatch.id} - ${localBatch.batchName}`);
+            trainerBatches.push(localBatch);
+          }
+        });
+      }
+      
+      console.log("Final trainer batches:", trainerBatches);
       
       setBatches(trainerBatches);
       
       // If there's a batch ID in the URL and it's valid, select it
       if (batchIdFromUrl) {
-        const validBatchId = trainerBatches.some(batch => batch.id === batchIdFromUrl);
+        const validBatchId = trainerBatches.some((batch: Batch) => batch.id === batchIdFromUrl);
         if (validBatchId) {
           setSelectedBatchId(batchIdFromUrl);
         } else if (trainerBatches.length > 0) {
@@ -302,10 +369,11 @@ export default function TrainerStudentsPage() {
   };
 
   // Filter students based on search term
-  const filteredStudents = students.filter(student => 
-    student.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (student.email && student.email.toLowerCase().includes(searchTerm.toLowerCase()))
-  );
+  const filteredStudents = students.filter(student => {
+    const nameMatch = student.name && student.name.toLowerCase().includes(searchTerm.toLowerCase());
+    const emailMatch = student.email && student.email.toLowerCase().includes(searchTerm.toLowerCase());
+    return nameMatch || emailMatch;
+  });
 
   // Paginate the filtered students
   const totalPages = Math.ceil(filteredStudents.length / itemsPerPage);
@@ -358,9 +426,9 @@ export default function TrainerStudentsPage() {
             {batches.length === 0 ? (
               <option value="">No accepted batches available</option>
             ) : (
-              batches.map(batch => (
+              batches.map((batch: Batch) => (
                 <option key={batch.id} value={batch.id}>
-                  {batch.batchName}
+                  {batch.batchName} {batch.trainees ? `(${batch.trainees.length} students)` : ''}
                 </option>
               ))
             )}

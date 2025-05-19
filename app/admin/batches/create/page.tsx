@@ -9,8 +9,9 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DatePicker } from "@/components/ui/date-picker";
-import { TraineeList } from "@/components/forms/TraineeList";
+import TraineeList from "@/components/forms/TraineeList";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { createNotification } from "@/lib/notifications";
 
 // Types
 type TrainerData = {
@@ -27,6 +28,9 @@ type Trainee = {
   email?: string;
 };
 
+// Define training types enum for better type safety
+type TrainingType = "ONLINE" | "OFFLINE" | "HYBRID";
+
 export default function CreateBatchPage() {
   const router = useRouter();
   const { data: session, status } = useSession();
@@ -37,13 +41,14 @@ export default function CreateBatchPage() {
   const [formData, setFormData] = useState({
     batchName: "",
     description: "",
-    trainingType: "ONLINE",
+    trainingType: "ONLINE" as TrainingType,
     startDate: new Date(),
     endDate: new Date(new Date().setMonth(new Date().getMonth() + 1)),
     meetingLink: "",
     venue: "",
     trainerId: "",
     trainees: [] as Trainee[],
+    hybridDetails: "",
   });
 
   useEffect(() => {
@@ -92,8 +97,19 @@ export default function CreateBatchPage() {
       // Generate a unique ID for the batch
       const batchId = `batch-${Date.now()}`;
       
-      // Find the selected trainer name
+      // Find the selected trainer name and email
       const selectedTrainer = trainers.find(trainer => trainer.id === formData.trainerId);
+      
+      console.log("Creating batch with trainer:", selectedTrainer);
+      
+      // Ensure trainees have proper IDs and data
+      const processedTrainees = formData.trainees.map((trainee, index) => ({
+        id: trainee.id || `student-${Date.now()}-${index}`,
+        name: trainee.name || `Student ${index + 1}`,
+        email: trainee.email || null
+      }));
+      
+      console.log("Processed trainees:", processedTrainees);
       
       // Prepare batch data
       const batchData = {
@@ -103,16 +119,27 @@ export default function CreateBatchPage() {
         trainingType: formData.trainingType,
         startDate: formData.startDate,
         endDate: formData.endDate,
-        meetingLink: formData.trainingType === "ONLINE" ? formData.meetingLink : null,
-        venue: formData.trainingType === "OFFLINE" ? formData.venue : null,
+        meetingLink: formData.trainingType === "ONLINE" || formData.trainingType === "HYBRID" 
+          ? formData.meetingLink 
+          : null,
+        venue: formData.trainingType === "OFFLINE" || formData.trainingType === "HYBRID" 
+          ? formData.venue 
+          : null,
+        hybridDetails: formData.trainingType === "HYBRID" 
+          ? formData.hybridDetails 
+          : null,
         trainerId: formData.trainerId,
         trainerName: selectedTrainer?.name || "Unknown Trainer",
+        trainerEmail: selectedTrainer?.email || null, // Store trainer email as well
         status: "PENDING",
-        trainees: formData.trainees,
-        traineeCount: formData.trainees.length,
+        trainees: processedTrainees,
+        traineeCount: processedTrainees.length,
         createdAt: new Date(),
         createdBy: session?.user?.id,
       };
+
+      // Log batch data for debugging
+      console.log("Submitting batch data:", batchData);
 
       // Save to API
       const response = await fetch("/api/batches", {
@@ -128,6 +155,26 @@ export default function CreateBatchPage() {
       }
 
       const result = await response.json();
+      console.log("API response:", result);
+      
+      // Create a purchase order notification
+      try {
+        console.log("Attempting to create PO notification for batch:", batchId);
+        const notification = createNotification({
+          batchId: batchId,
+          batchName: formData.batchName,
+          message: `New batch "${formData.batchName}" created. Please create a purchase order.`,
+          status: "UNREAD",
+          type: "PURCHASE_ORDER"
+        });
+        console.log("Successfully created notification:", notification);
+        
+        // Verify the notification was stored
+        const storedNotifications = localStorage.getItem('verity-notifications');
+        console.log("Current notifications in storage:", storedNotifications);
+      } catch (error) {
+        console.error("Error creating PO notification:", error);
+      }
       
       // Process the clientData to ensure trainers can see this batch
       if (result.clientData) {
@@ -138,17 +185,29 @@ export default function CreateBatchPage() {
           console.warn("Failed to register batch with trainer, but batch was created");
         }
       }
-      
-      console.log("Batch created successfully:", batchData);
+
       setSuccess(true);
       
-      // Reset form or redirect
+      // Clear form after successful submission
+      setFormData({
+        batchName: "",
+        description: "",
+        trainingType: "ONLINE" as TrainingType,
+        startDate: new Date(),
+        endDate: new Date(new Date().setMonth(new Date().getMonth() + 1)),
+        meetingLink: "",
+        venue: "",
+        trainerId: "",
+        trainees: [],
+        hybridDetails: "",
+      });
+      
+      // Redirect after a brief delay
       setTimeout(() => {
-        router.push("/batches");
+        router.push("/admin/batches");
       }, 2000);
-
-    } catch (err) {
-      console.error("Error creating batch:", err);
+    } catch (error) {
+      console.error("Error creating batch:", error);
       setError("Failed to create batch. Please try again.");
     } finally {
       setIsLoading(false);
@@ -226,7 +285,7 @@ export default function CreateBatchPage() {
               <Label htmlFor="trainingType">Training Type</Label>
               <Select
                 value={formData.trainingType}
-                onValueChange={(value) => handleSelectChange("trainingType", value)}
+                onValueChange={(value: string) => handleSelectChange("trainingType", value)}
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Select training type" />
@@ -244,7 +303,7 @@ export default function CreateBatchPage() {
               <Label>Start Date</Label>
               <DatePicker 
                 date={formData.startDate} 
-                setDate={(date) => handleDateChange("startDate", date)}
+                setDate={(date: Date) => handleDateChange("startDate", date)}
               />
             </div>
             
@@ -253,12 +312,12 @@ export default function CreateBatchPage() {
               <Label>End Date</Label>
               <DatePicker 
                 date={formData.endDate} 
-                setDate={(date) => handleDateChange("endDate", date)}
+                setDate={(date: Date) => handleDateChange("endDate", date)}
               />
             </div>
             
             {/* Location - conditional based on training type */}
-            {formData.trainingType === "ONLINE" && (
+            {(formData.trainingType === "ONLINE" || formData.trainingType === "HYBRID") && (
               <div className="grid w-full items-center gap-1.5">
                 <Label htmlFor="meetingLink">Meeting Link</Label>
                 <Input
@@ -271,7 +330,7 @@ export default function CreateBatchPage() {
               </div>
             )}
             
-            {formData.trainingType === "OFFLINE" && (
+            {(formData.trainingType === "OFFLINE" || formData.trainingType === "HYBRID") && (
               <div className="grid w-full items-center gap-1.5">
                 <Label htmlFor="venue">Venue</Label>
                 <Input
@@ -284,12 +343,26 @@ export default function CreateBatchPage() {
               </div>
             )}
             
+            {formData.trainingType === "HYBRID" && (
+              <div className="grid w-full items-center gap-1.5">
+                <Label htmlFor="hybridDetails">Hybrid Training Details</Label>
+                <Textarea
+                  id="hybridDetails"
+                  name="hybridDetails"
+                  value={formData.hybridDetails}
+                  onChange={handleInputChange}
+                  placeholder="Provide details about hybrid setup, schedule for online/offline sessions, etc."
+                  rows={3}
+                />
+              </div>
+            )}
+            
             {/* Trainer Selection */}
             <div className="grid w-full items-center gap-1.5">
               <Label htmlFor="trainerId">Assign Trainer</Label>
               <Select
                 value={formData.trainerId}
-                onValueChange={(value) => handleSelectChange("trainerId", value)}
+                onValueChange={(value: string) => handleSelectChange("trainerId", value)}
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Select a trainer" />

@@ -50,6 +50,7 @@ export const Navbar = () => {
       case "TRAINER":
         return [
           { name: "Dashboard", href: "/dashboard" },
+          { name: "Profile", href: "/trainer/profile" },
           { name: "Batches", href: "/trainer/batches" },
           { name: "Assignments", href: "/trainer/assignments" },
           { name: "Students", href: "/trainer/students" },

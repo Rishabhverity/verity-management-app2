@@ -24,7 +24,7 @@ interface Batch {
   startDate: Date;
   endDate: Date;
   trainerId: string;
-  trainingType: string;
+  trainingType: "ONLINE" | "OFFLINE" | "HYBRID";
   status: string;
   isAssignedToCurrentTrainer?: boolean;
 }

@@ -106,10 +106,12 @@ model PurchaseOrder {
   fileUrl      String?
   status       String     @default("PENDING")
   uploadedById String
+  batchId      String
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
   invoices     Invoice[]
   uploadedBy   Operations @relation(fields: [uploadedById], references: [id])
+  batch        TrainingBatch @relation(fields: [batchId], references: [id])
 }
 
 model Invoice {

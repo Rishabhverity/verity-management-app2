@@ -10,14 +10,25 @@ interface Trainee {
 
 interface TraineeListProps {
   trainees: Trainee[];
-  onTraineesChange: (trainees: Trainee[]) => void;
+  onTraineesChange?: (trainees: Trainee[]) => void;
+  onChange?: (trainees: Trainee[]) => void;
 }
 
-export default function TraineeList({ trainees, onTraineesChange }: TraineeListProps) {
+export default function TraineeList({ trainees, onTraineesChange, onChange }: TraineeListProps) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [newName, setNewName] = useState("");
   const [newEmail, setNewEmail] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Function to handle both callback types
+  const updateTrainees = (updatedTrainees: Trainee[]) => {
+    if (onTraineesChange) {
+      onTraineesChange(updatedTrainees);
+    }
+    if (onChange) {
+      onChange(updatedTrainees);
+    }
+  };
 
   const handleEdit = (trainee: Trainee) => {
     setEditingId(trainee.id);
@@ -33,7 +44,7 @@ export default function TraineeList({ trainees, onTraineesChange }: TraineeListP
       trainee.id === editingId ? { ...trainee, name: newName.trim(), email: newEmail.trim() } : trainee
     );
 
-    onTraineesChange(updatedTrainees);
+    updateTrainees(updatedTrainees);
     setEditingId(null);
     setNewName("");
     setNewEmail("");
@@ -50,10 +61,10 @@ export default function TraineeList({ trainees, onTraineesChange }: TraineeListP
     e.preventDefault(); // Prevent form submission
     const newTrainee: Trainee = {
       id: `temp-${Date.now()}`,
-      name: "",
+      name: "New Trainee",
       email: ""
     };
-    onTraineesChange([...trainees, newTrainee]);
+    updateTrainees([...trainees, newTrainee]);
     setEditingId(newTrainee.id);
     setNewName("New Trainee");
     setNewEmail("");
@@ -61,7 +72,7 @@ export default function TraineeList({ trainees, onTraineesChange }: TraineeListP
 
   const handleDelete = (e: React.MouseEvent, id: string) => {
     e.preventDefault(); // Prevent form submission
-    onTraineesChange(trainees.filter(t => t.id !== id));
+    updateTrainees(trainees.filter(t => t.id !== id));
   };
 
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -85,7 +96,7 @@ export default function TraineeList({ trainees, onTraineesChange }: TraineeListP
           email: row.email || row.Email || undefined
         }));
 
-        onTraineesChange([...trainees, ...newTrainees]);
+        updateTrainees([...trainees, ...newTrainees]);
       } catch (error) {
         console.error('Error reading Excel file:', error);
         alert('Error reading Excel file. Please make sure it has "name" and "email" columns.');

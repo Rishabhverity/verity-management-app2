@@ -45,7 +45,7 @@ const batchFormSchema = z.object({
   endDate: z.date({ required_error: "End date is required" }),
   startTime: z.date({ required_error: "Start time is required" }),
   endTime: z.date({ required_error: "End time is required" }),
-  trainingType: z.enum(["ONLINE", "OFFLINE"], { required_error: "Training type is required" }),
+  trainingType: z.enum(["ONLINE", "OFFLINE", "HYBRID"], { required_error: "Training type is required" }),
   meetingLink: z.string().url({ message: "Please enter a valid URL" }).optional().or(z.literal("")),
   trainerId: z.string().optional(),
   trainees: z.array(z.string()).optional(),
@@ -195,6 +195,7 @@ export default function BatchForm({
           >
             <option value="ONLINE">Online</option>
             <option value="OFFLINE">Offline</option>
+            <option value="HYBRID">Hybrid</option>
           </select>
           {errors.trainingType && (
             <p className="mt-1 text-sm text-red-600">{errors.trainingType.message}</p>

@@ -7,34 +7,21 @@ export default function HomePage() {
       {/* Hero Section */}
       <section className="relative bg-gradient-to-r from-blue-600 to-indigo-700 text-white py-20">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="md:flex md:items-center md:justify-between">
-            <div className="md:w-1/2">
-              <h1 className="text-4xl font-extrabold tracking-tight sm:text-5xl md:text-6xl">
-                Training Management System
-              </h1>
-              <p className="mt-6 max-w-md text-lg text-blue-100">
-                A centralized platform for managing training operations, 
-                connecting trainers, operations, and accounts departments,
-                streamlining workflows and improving coordination.
-              </p>
-              <div className="mt-8 flex space-x-4">
-                <Button size="lg" asChild className="bg-white text-blue-700 hover:bg-blue-50">
-                  <Link href="/login">
-                    Log In
-                  </Link>
-                </Button>
-              </div>
-            </div>
-            <div className="mt-12 md:mt-0 md:w-1/2">
-              <div className="relative">
-                <div className="bg-white rounded-lg shadow-xl p-6">
-                  <div className="h-64 bg-gray-100 rounded flex items-center justify-center">
-                    <svg className="w-32 h-32 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
-                    </svg>
-                  </div>
-                </div>
-              </div>
+          <div className="text-center">
+            <h1 className="text-4xl font-extrabold tracking-tight sm:text-5xl md:text-6xl">
+              Training Management System
+            </h1>
+            <p className="mt-6 max-w-xl mx-auto text-lg text-blue-100">
+              A centralized platform for managing training operations, 
+              connecting trainers, operations, and accounts departments,
+              streamlining workflows and improving coordination.
+            </p>
+            <div className="mt-8 flex justify-center space-x-4">
+              <Button size="lg" asChild className="bg-white text-blue-700 hover:bg-blue-50">
+                <Link href="/login">
+                  Log In
+                </Link>
+              </Button>
             </div>
           </div>
         </div>

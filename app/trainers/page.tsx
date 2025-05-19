@@ -230,7 +230,7 @@ export default function TrainersPage() {
                       <Button
                         variant="outline"
                         size="sm"
-                        onClick={() => router.push(`/trainers/${trainer.id}`)}
+                        onClick={() => router.push(`/trainer/profile/${trainer.id}`)}
                       >
                         View Profile
                       </Button>
