@@ -32,7 +32,22 @@ interface Batch {
   venue?: string;
   accommodation?: string;
   travel?: string;
+  hasPurchaseOrder?: boolean;
+  purchaseOrderId?: string;
 }
+
+// Define a type for purchase orders
+type PurchaseOrder = {
+  id: string;
+  poNumber: string;
+  clientName: string;
+  amount: number;
+  status: string;
+  uploadedAt: string;
+  fileUrl: string | null;
+  batchId?: string;
+  batchName?: string;
+};
 
 export default function BatchesPage() {
   const { data: session, status } = useSession();
@@ -45,6 +60,7 @@ export default function BatchesPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [filterStatus, setFilterStatus] = useState<BatchStatus | "ALL">("ALL");
   const [trainers, setTrainers] = useState<{id: string, name: string}[]>([]);
+  const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>([]);
   
   // Pagination states
   const [currentPage, setCurrentPage] = useState(1);
@@ -104,6 +120,38 @@ export default function BatchesPage() {
       }
     }
   }, [status, canViewBatches]);
+  
+  // Load purchase orders from localStorage
+  useEffect(() => {
+    if (status === "authenticated") {
+      try {
+        const storedPOs = localStorage.getItem('verity-purchase-orders');
+        
+        if (storedPOs) {
+          setPurchaseOrders(JSON.parse(storedPOs));
+        }
+      } catch (error) {
+        console.error("Error loading purchase orders:", error);
+        setPurchaseOrders([]);
+      }
+    }
+  }, [status]);
+  
+  // Update batches with purchase order information
+  useEffect(() => {
+    if (batches.length > 0 && purchaseOrders.length > 0) {
+      const updatedBatches = batches.map(batch => {
+        const poForBatch = purchaseOrders.find(po => po.batchId === batch.id);
+        return {
+          ...batch,
+          hasPurchaseOrder: !!poForBatch,
+          purchaseOrderId: poForBatch?.id
+        };
+      });
+      setBatches(updatedBatches);
+      saveBatchesToStorage(updatedBatches);
+    }
+  }, [purchaseOrders, batches.length]);
 
   // Reset to first page when filter changes
   useEffect(() => {
@@ -459,13 +507,16 @@ export default function BatchesPage() {
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
                 Status
               </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Trainees
               </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Trainer
               </th>
-              <th className="px-6 py-3 text-right text-xs font-medium text-gray-700 uppercase tracking-wider">
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                Purchase Order
+              </th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Actions
               </th>
             </tr>
@@ -523,6 +574,17 @@ export default function BatchesPage() {
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
                   {batch.trainerName || "Not Assigned"}
                 </td>
+                <td className="px-6 py-4 whitespace-nowrap">
+                  {batch.hasPurchaseOrder ? (
+                    <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">
+                      Created
+                    </span>
+                  ) : (
+                    <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-yellow-100 text-yellow-800">
+                      Not Created
+                    </span>
+                  )}
+                </td>
                 <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                   <div className="flex justify-end space-x-2">
                     <Button
@@ -547,7 +609,7 @@ export default function BatchesPage() {
             {paginatedBatches.length === 0 && (
               <tr>
                 <td
-                  colSpan={7}
+                  colSpan={8}
                   className="px-6 py-10 text-center text-sm text-gray-700"
                 >
                   No batches found for the selected filter

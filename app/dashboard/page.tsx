@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { Button } from "@/components/ui/button";
+import { checkAllBatchesForPurchaseOrders } from "@/lib/notifications";
 
 // Dashboard card component
 interface DashboardCardProps {
@@ -51,6 +52,9 @@ export default function DashboardPage() {
     }
     
     if (status === "authenticated" && session?.user?.role === "ADMIN") {
+      // Check for batches without purchase orders and create notifications
+      checkAllBatchesForPurchaseOrders();
+      // Update notification count
       setNotificationCount(getUnreadNotificationsCount());
     }
   }, [status, router, session]);

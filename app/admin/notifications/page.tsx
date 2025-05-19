@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Pagination } from "@/components/ui/pagination";
 import { Button } from "@/components/ui/button";
@@ -10,17 +11,20 @@ interface Notification {
   id: string;
   batchId: string;
   batchName: string;
-  trainerId: string;
-  trainerName: string;
+  trainerId?: string;
+  trainerName?: string;
   message: string;
   status: "UNREAD" | "READ";
   createdAt: Date;
+  type: "TRAINING_DECLINED" | "PURCHASE_ORDER_NEEDED" | "SYSTEM";
+  actionUrl?: string;
 }
 
 type FilterStatus = "ALL" | "UNREAD" | "READ";
 
 export default function AdminNotificationsPage() {
   const { data: session, status } = useSession();
+  const router = useRouter();
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
   
@@ -262,11 +266,19 @@ export default function AdminNotificationsPage() {
                       {notification.status === "UNREAD" && (
                         <span className="inline-block w-2 h-2 bg-blue-500 rounded-full mr-2"></span>
                       )}
-                      Training Declined: {notification.batchName}
+                      {notification.type === "TRAINING_DECLINED" ? (
+                        <>Training Declined: {notification.batchName}</>
+                      ) : notification.type === "PURCHASE_ORDER_NEEDED" ? (
+                        <>Purchase Order Needed: {notification.batchName}</>
+                      ) : (
+                        <>System Notification: {notification.batchName}</>
+                      )}
                     </h3>
-                    <p className="text-gray-600 mt-1">
-                      Trainer: {notification.trainerName}
-                    </p>
+                    {notification.trainerId && notification.trainerName && (
+                      <p className="text-gray-600 mt-1">
+                        Trainer: {notification.trainerName}
+                      </p>
+                    )}
                     <p className="mt-2">{notification.message}</p>
                     <p className="text-gray-500 text-sm mt-2">
                       {formatDate(notification.createdAt)}
@@ -280,6 +292,14 @@ export default function AdminNotificationsPage() {
                         className="text-blue-600 hover:text-blue-800"
                       >
                         Mark as Read
+                      </button>
+                    )}
+                    {notification.actionUrl && (
+                      <button
+                        onClick={() => router.push(notification.actionUrl || "")}
+                        className="text-green-600 hover:text-green-800"
+                      >
+                        Take Action
                       </button>
                     )}
                     <button

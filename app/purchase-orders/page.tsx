@@ -16,6 +16,8 @@ type PurchaseOrder = {
   status: POStatus;
   uploadedAt: string;
   fileUrl: string | null;
+  batchId?: string;
+  batchName?: string;
 };
 
 // Default mock data for initial setup if no POs in localStorage
@@ -27,7 +29,9 @@ const DEFAULT_PURCHASE_ORDERS: PurchaseOrder[] = [
     amount: 5000,
     status: "PENDING" as POStatus,
     uploadedAt: new Date(2023, 5, 15).toISOString(),
-    fileUrl: null
+    fileUrl: null,
+    batchId: "batch-1",
+    batchName: "React Fundamentals"
   },
   {
     id: "2",
@@ -36,7 +40,9 @@ const DEFAULT_PURCHASE_ORDERS: PurchaseOrder[] = [
     amount: 3500,
     status: "PROCESSED" as POStatus,
     uploadedAt: new Date(2023, 6, 10).toISOString(),
-    fileUrl: "/mock-po.pdf"
+    fileUrl: "/mock-po.pdf",
+    batchId: "batch-2",
+    batchName: "Advanced JavaScript"
   },
   {
     id: "3",
@@ -45,9 +51,21 @@ const DEFAULT_PURCHASE_ORDERS: PurchaseOrder[] = [
     amount: 7500,
     status: "INVOICED" as POStatus,
     uploadedAt: new Date(2023, 7, 5).toISOString(),
-    fileUrl: "/mock-po.pdf"
+    fileUrl: "/mock-po.pdf",
+    batchId: "batch-3",
+    batchName: "UI/UX Design Principles"
   }
 ];
+
+// Define a type for batches
+type Batch = {
+  id: string;
+  batchName: string;
+  startDate: Date;
+  endDate: Date;
+  trainingType: string;
+  status: string;
+};
 
 export default function PurchaseOrdersPage() {
   const { data: session, status } = useSession();
@@ -56,10 +74,12 @@ export default function PurchaseOrdersPage() {
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [batches, setBatches] = useState<Batch[]>([]);
   const [formData, setFormData] = useState({
     poNumber: "",
     clientName: "",
     amount: "",
+    batchId: "",
   });
   
   // Pagination and search states
@@ -100,6 +120,30 @@ export default function PurchaseOrdersPage() {
       }
     }
   }, [status]);
+  
+  // Load batches from localStorage
+  useEffect(() => {
+    if (status === "authenticated") {
+      try {
+        const storedBatches = localStorage.getItem('verity-batches');
+        
+        if (storedBatches) {
+          // Parse the dates properly
+          const parsedBatches = JSON.parse(storedBatches, (key, value) => {
+            // Convert date strings back to Date objects
+            if (key === 'startDate' || key === 'endDate' || key === 'startTime' || key === 'endTime') {
+              return value ? new Date(value) : null;
+            }
+            return value;
+          });
+          setBatches(parsedBatches);
+        }
+      } catch (error) {
+        console.error('Error parsing stored batches:', error);
+        setBatches([]);
+      }
+    }
+  }, [status]);
 
   // Check if user has permission to upload POs
   const userRole = session?.user?.role ? String(session.user.role).toUpperCase() : "";
@@ -107,7 +151,7 @@ export default function PurchaseOrdersPage() {
   // Check if user can view and/or process POs
   const canViewPO = userRole === "OPERATIONS" || userRole === "ACCOUNTS" || userRole === "ADMIN";
 
-  const handleFormChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFormChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
   };
@@ -122,6 +166,10 @@ export default function PurchaseOrdersPage() {
     e.preventDefault();
     setIsLoading(true);
 
+    // Find the selected batch name
+    const selectedBatch = batches.find(batch => batch.id === formData.batchId);
+    const batchName = selectedBatch ? selectedBatch.batchName : "";
+
     // Create a new purchase order
     const newPO: PurchaseOrder = {
       id: `po-${Date.now()}`,
@@ -130,38 +178,83 @@ export default function PurchaseOrdersPage() {
       amount: parseFloat(formData.amount),
       status: "PENDING" as POStatus,
       uploadedAt: new Date().toISOString(),
-      fileUrl: selectedFile ? URL.createObjectURL(selectedFile) : null
+      fileUrl: selectedFile ? URL.createObjectURL(selectedFile) : null,
+      batchId: formData.batchId,
+      batchName: batchName
     };
 
-    // Update state and localStorage
+    // Add to state and localStorage - add new PO at the beginning of the array
     const updatedPOs = [newPO, ...purchaseOrders];
     setPurchaseOrders(updatedPOs);
+    localStorage.setItem('verity-purchase-orders', JSON.stringify(updatedPOs));
     
-    try {
-      localStorage.setItem('verity-purchase-orders', JSON.stringify(updatedPOs));
-    } catch (error) {
-      console.error("Error saving to localStorage:", error);
-    }
+    // Update the batch to indicate it has a purchase order
+    updateBatchWithPurchaseOrder(formData.batchId, newPO.id);
+    
+    // Reset to first page to ensure the new PO is visible
+    setCurrentPage(1);
+    setSearchTerm("");
+    setFilterStatus("ALL");
 
     // Reset form
-    setIsFormOpen(false);
-    setFormData({ poNumber: "", clientName: "", amount: "" });
+    setFormData({
+      poNumber: "",
+      clientName: "",
+      amount: "",
+      batchId: "",
+    });
     setSelectedFile(null);
+    setIsFormOpen(false);
     setIsLoading(false);
   };
 
+  // Function to update a batch with purchase order information
+  const updateBatchWithPurchaseOrder = (batchId: string, purchaseOrderId: string) => {
+    try {
+      // Get current batches from localStorage
+      const storedBatches = localStorage.getItem('verity-batches');
+      
+      if (storedBatches) {
+        // Parse the dates properly
+        const parsedBatches = JSON.parse(storedBatches, (key, value) => {
+          // Convert date strings back to Date objects
+          if (key === 'startDate' || key === 'endDate' || key === 'startTime' || key === 'endTime') {
+            return value ? new Date(value) : null;
+          }
+          return value;
+        });
+        
+        // Update the batch with purchase order information
+        const updatedBatches = parsedBatches.map((batch: any) => {
+          if (batch.id === batchId) {
+            return {
+              ...batch,
+              hasPurchaseOrder: true,
+              purchaseOrderId: purchaseOrderId
+            };
+          }
+          return batch;
+        });
+        
+        // Save updated batches back to localStorage
+        localStorage.setItem('verity-batches', JSON.stringify(updatedBatches));
+      }
+    } catch (error) {
+      console.error('Error updating batch with purchase order:', error);
+    }
+  };
+
   const handleProcessPO = (poId: string) => {
+    setIsLoading(true);
+    
+    // Update the PO status to PROCESSED
     const updatedPOs = purchaseOrders.map(po => 
       po.id === poId ? { ...po, status: "PROCESSED" as POStatus } : po
     );
     
     setPurchaseOrders(updatedPOs);
-    
-    try {
-      localStorage.setItem('verity-purchase-orders', JSON.stringify(updatedPOs));
-    } catch (error) {
-      console.error("Error saving to localStorage:", error);
-    }
+    localStorage.setItem('verity-purchase-orders', JSON.stringify(updatedPOs));
+    setIsLoading(false);
   };
 
   // Filter purchase orders by search term and status
@@ -268,19 +361,39 @@ export default function PurchaseOrdersPage() {
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                 />
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  PO Document
+              <div className="mt-4">
+                <label className="block text-sm font-medium text-gray-700">
+                  Select Batch
+                </label>
+                <select
+                  name="batchId"
+                  value={formData.batchId}
+                  onChange={handleFormChange}
+                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                  required
+                >
+                  <option value="">-- Select a batch --</option>
+                  {batches.map((batch) => (
+                    <option key={batch.id} value={batch.id}>
+                      {batch.batchName} ({new Date(batch.startDate).toLocaleDateString()} - {new Date(batch.endDate).toLocaleDateString()})
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="mt-4">
+                <label className="block text-sm font-medium text-gray-700">
+                  Upload PO Document (Optional)
                 </label>
                 <input
                   type="file"
-                  accept=".pdf,.doc,.docx"
+                  className="mt-1 block w-full text-sm text-gray-500
+                    file:mr-4 file:py-2 file:px-4
+                    file:rounded-md file:border-0
+                    file:text-sm file:font-semibold
+                    file:bg-blue-50 file:text-blue-700
+                    hover:file:bg-blue-100"
                   onChange={handleFileChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                 />
-                <p className="mt-1 text-xs text-gray-500">
-                  Accepted formats: PDF, DOC, DOCX
-                </p>
               </div>
             </div>
             <div className="flex justify-end mt-6 space-x-3">
@@ -365,6 +478,9 @@ export default function PurchaseOrdersPage() {
                   Amount
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Associated Batch
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Status
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -391,6 +507,9 @@ export default function PurchaseOrdersPage() {
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                     ₹{po.amount.toFixed(2)}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                    {po.batchName || "Not associated"}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full 

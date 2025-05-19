@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useSearchParams } from "next/navigation";
 import { useSession } from "next-auth/react";
 import * as XLSX from "xlsx";
 import { format } from "date-fns";
 import { Pagination } from "@/components/ui/pagination";
+import { Button } from "@/components/ui/button";
 
 interface Student {
   id: string;
@@ -58,6 +59,13 @@ export default function TrainerStudentsPage() {
     format(new Date(), "yyyy-MM-dd")
   );
   const [attendanceRecords, setAttendanceRecords] = useState<AttendanceRecord[]>([]);
+  
+  // Email modal states
+  const [isEmailModalOpen, setIsEmailModalOpen] = useState(false);
+  const [emailAddress, setEmailAddress] = useState("");
+  const [emailStatus, setEmailStatus] = useState<'idle' | 'sending' | 'success' | 'error'>('idle');
+  const [emailMessage, setEmailMessage] = useState("");
+  const emailModalRef = useRef<HTMLDivElement>(null);
   
   // Search and pagination states
   const [searchTerm, setSearchTerm] = useState("");
@@ -335,36 +343,127 @@ export default function TrainerStudentsPage() {
     }
   };
 
+  const generateAttendanceWorkbook = () => {
+    if (!selectedBatchId) return null;
+    
+    const selectedBatch = batches.find(batch => batch.id === selectedBatchId);
+    if (!selectedBatch) return null;
+    
+    // Prepare the data for Excel
+    const worksheet = XLSX.utils.json_to_sheet(
+      students.map(student => ({
+        'Student ID': student.id,
+        'Name': student.name,
+        'Email': student.email || 'N/A',
+        'Attendance': student.present ? 'Present' : 'Absent',
+        'Date': attendanceDate
+      }))
+    );
+    
+    // Create a workbook
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Attendance");
+    
+    return {
+      workbook,
+      fileName: `${selectedBatch.batchName}_Attendance_${attendanceDate}.xlsx`,
+      batchName: selectedBatch.batchName
+    };
+  };
+  
   const downloadAttendance = () => {
     try {
-      if (!selectedBatchId) return;
-      
-      const selectedBatch = batches.find(batch => batch.id === selectedBatchId);
-      if (!selectedBatch) return;
-      
-      // Prepare the data for Excel
-      const worksheet = XLSX.utils.json_to_sheet(
-        students.map(student => ({
-          'Student ID': student.id,
-          'Name': student.name,
-          'Email': student.email || 'N/A',
-          'Attendance': student.present ? 'Present' : 'Absent',
-          'Date': attendanceDate
-        }))
-      );
-      
-      // Create a workbook
-      const workbook = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(workbook, worksheet, "Attendance");
-      
-      // Generate file name
-      const fileName = `${selectedBatch.batchName}_Attendance_${attendanceDate}.xlsx`;
+      const attendanceData = generateAttendanceWorkbook();
+      if (!attendanceData) {
+        alert("No batch selected or no data available");
+        return;
+      }
       
       // Write and download
-      XLSX.writeFile(workbook, fileName);
+      XLSX.writeFile(attendanceData.workbook, attendanceData.fileName);
     } catch (error) {
       console.error("Error downloading attendance:", error);
       alert("Failed to download attendance");
+    }
+  };
+  
+  const openEmailModal = () => {
+    // Default to trainer's email if available
+    setEmailAddress(session?.user?.email || "");
+    setIsEmailModalOpen(true);
+    setEmailStatus('idle');
+    setEmailMessage("");
+  };
+  
+  const closeEmailModal = () => {
+    setIsEmailModalOpen(false);
+  };
+  
+  // Handle clicks outside the modal to close it
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (emailModalRef.current && !emailModalRef.current.contains(event.target as Node)) {
+        closeEmailModal();
+      }
+    };
+    
+    if (isEmailModalOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isEmailModalOpen]);
+  
+  const sendAttendanceByEmail = async () => {
+    try {
+      setEmailStatus('sending');
+      
+      const attendanceData = generateAttendanceWorkbook();
+      if (!attendanceData) {
+        setEmailStatus('error');
+        setEmailMessage("No batch selected or no data available");
+        return;
+      }
+      
+      // Create a form data object to send to the API
+      const formData = new FormData();
+      
+      // Convert the workbook to a blob
+      const excelBlob = XLSX.write(attendanceData.workbook, { bookType: 'xlsx', type: 'array' });
+      
+      // Add the file to the form data
+      formData.append('file', new Blob([excelBlob]), attendanceData.fileName);
+      formData.append('email', emailAddress);
+      formData.append('subject', `Attendance Report for ${attendanceData.batchName}`);
+      formData.append('message', `Please find attached the attendance report for ${attendanceData.batchName} on ${attendanceDate}.`);
+      
+      // Send the email via the API endpoint
+      const response = await fetch('/api/send-email', {
+        method: 'POST',
+        body: formData
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to send email');
+      }
+      
+      // Show success message
+      setEmailStatus('success');
+      setEmailMessage(`Attendance report for ${attendanceData.batchName} has been sent to ${emailAddress}`);
+      
+      // Auto close after success
+      setTimeout(() => {
+        closeEmailModal();
+      }, 3000);
+      
+    } catch (error) {
+      console.error("Error sending email:", error);
+      setEmailStatus('error');
+      setEmailMessage(typeof error === 'object' && error !== null && 'message' in error ? 
+        (error as Error).message : "Failed to send email. Please try again.");
     }
   };
 
@@ -537,7 +636,104 @@ export default function TrainerStudentsPage() {
             >
               Download as Excel
             </button>
+            
+            <button
+              onClick={openEmailModal}
+              className="bg-purple-600 hover:bg-purple-700 text-white py-2 px-4 rounded"
+            >
+              Send via Email
+            </button>
           </div>
+          
+          {/* Email Modal */}
+          {isEmailModalOpen && (
+            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+              <div 
+                ref={emailModalRef}
+                className="bg-white rounded-lg p-6 w-full max-w-md"
+              >
+                <h3 className="text-lg font-semibold mb-4">Send Attendance Report via Email</h3>
+                
+                {emailStatus === 'idle' || emailStatus === 'sending' ? (
+                  <>
+                    <div className="mb-4">
+                      <label htmlFor="emailAddress" className="block text-sm font-medium text-gray-700 mb-1">
+                        Recipient Email Address
+                      </label>
+                      <input
+                        type="email"
+                        id="emailAddress"
+                        value={emailAddress}
+                        onChange={(e) => setEmailAddress(e.target.value)}
+                        className="w-full p-2 border rounded"
+                        placeholder="Enter email address"
+                        disabled={emailStatus === 'sending'}
+                        required
+                      />
+                    </div>
+                    
+                    <div className="flex justify-end space-x-2">
+                      <button
+                        onClick={closeEmailModal}
+                        className="bg-gray-300 hover:bg-gray-400 text-gray-800 py-2 px-4 rounded"
+                        disabled={emailStatus === 'sending'}
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        onClick={sendAttendanceByEmail}
+                        className="bg-blue-600 hover:bg-blue-700 text-white py-2 px-4 rounded"
+                        disabled={!emailAddress || emailStatus === 'sending'}
+                      >
+                        {emailStatus === 'sending' ? 'Sending...' : 'Send'}
+                      </button>
+                    </div>
+                  </>
+                ) : emailStatus === 'success' ? (
+                  <div className="text-center">
+                    <div className="mb-4 text-green-600 flex flex-col items-center">
+                      <svg className="w-16 h-16" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"></path>
+                      </svg>
+                      <p className="mt-2">{emailMessage}</p>
+                    </div>
+                    <button
+                      onClick={closeEmailModal}
+                      className="bg-gray-300 hover:bg-gray-400 text-gray-800 py-2 px-4 rounded"
+                    >
+                      Close
+                    </button>
+                  </div>
+                ) : (
+                  <div className="text-center">
+                    <div className="mb-4 text-red-600 flex flex-col items-center">
+                      <svg className="w-16 h-16" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path>
+                      </svg>
+                      <p className="mt-2">{emailMessage}</p>
+                    </div>
+                    <div className="flex justify-center space-x-2">
+                      <button
+                        onClick={closeEmailModal}
+                        className="bg-gray-300 hover:bg-gray-400 text-gray-800 py-2 px-4 rounded"
+                      >
+                        Close
+                      </button>
+                      <button
+                        onClick={() => {
+                          setEmailStatus('idle');
+                          setEmailMessage("");
+                        }}
+                        className="bg-blue-600 hover:bg-blue-700 text-white py-2 px-4 rounded"
+                      >
+                        Try Again
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
         </>
       ) : (
         <div className="bg-yellow-50 p-6 rounded-lg text-center">
