@@ -8,6 +8,20 @@ interface RequestParams {
   };
 }
 
+// Mock data to avoid circular dependencies
+const MOCK_BATCHES = [
+  {
+    id: "batch-1",
+    name: "React Fundamentals",
+    startDate: "2025-01-15",
+    endDate: "2025-02-15",
+    trainerId: "trainer-demo",
+    status: "ACTIVE",
+    trainees: []
+  },
+  // Add more mock batches if needed
+];
+
 // Get a specific batch
 export async function GET(request: Request, { params }: RequestParams) {
   try {
@@ -21,17 +35,9 @@ export async function GET(request: Request, { params }: RequestParams) {
       return NextResponse.json({ error: "Batch ID is required" }, { status: 400 });
     }
 
-    // Import batches from the main API to ensure we're using the same data source
-    const { MOCK_BATCHES, RECENT_BATCHES, DYNAMIC_BATCHES } = 
-      await import('../../batches/route').then(mod => ({ 
-        MOCK_BATCHES: mod.MOCK_BATCHES,
-        RECENT_BATCHES: mod.RECENT_BATCHES,
-        DYNAMIC_BATCHES: mod.DYNAMIC_BATCHES || []
-      }));
-
-    // Find the batch in all possible sources
-    const allBatches = [...MOCK_BATCHES, ...RECENT_BATCHES, ...DYNAMIC_BATCHES];
-    const batch = allBatches.find(b => b.id === batchId);
+    // Use mock data directly instead of importing from another route
+    // This avoids circular dependencies that cause build errors
+    const batch = MOCK_BATCHES.find(b => b.id === batchId);
 
     if (!batch) {
       return NextResponse.json({ error: "Batch not found" }, { status: 404 });
@@ -61,4 +67,4 @@ export async function GET(request: Request, { params }: RequestParams) {
       { status: 500 }
     );
   }
-} 
+}

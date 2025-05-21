@@ -3,11 +3,11 @@
   publish = ".next"
 
 [build.environment]
-  NODE_VERSION = "16"
-  NPM_VERSION = "8"
+  NODE_VERSION = "18.17.0"
+  NPM_VERSION = "9.6.7"
   NEXT_TELEMETRY_DISABLED = "1"
-  NETLIFY_USE_YARN = "false"
 
+# Simple redirect for client-side routing
 [[redirects]]
   from = "/*"
   to = "/index.html"
