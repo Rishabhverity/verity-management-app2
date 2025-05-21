@@ -6,13 +6,13 @@ import { Footer } from "@/components/layout/footer";
 import { NextAuthProvider } from "@/providers/auth-provider";
 
 const inter = Inter({
-  variable: "--font-sans",
+  variable: "--font-inter",
   subsets: ["latin"],
   display: "swap",
 });
 
 const robotoMono = Roboto_Mono({
-  variable: "--font-mono",
+  variable: "--font-roboto-mono",
   subsets: ["latin"],
   display: "swap",
 });
