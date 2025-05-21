@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import { useParams } from "@/lib/params-helper";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
@@ -30,7 +31,7 @@ interface TrainerProfile {
   bio: string;
 }
 
-export default function TrainerAdminProfilePage({ params }: { params: { trainerId: string } }) {
+export default function TrainerAdminProfilePage({ params }: { params: any }) {
   const { data: session, status } = useSession();
   const router = useRouter();
   const [loading, setLoading] = useState(true);
@@ -41,8 +42,8 @@ export default function TrainerAdminProfilePage({ params }: { params: { trainerI
   const [photoFile, setPhotoFile] = useState<File | null>(null);
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   
-  // Get trainerId directly without using React.use()
-  const trainerId = params.trainerId;
+  // Unwrap params using our helper function
+  const { trainerId } = useParams<{ trainerId: string }>(params);
 
   // Check if user has admin permissions
   const userRole = session?.user?.role ? String(session.user.role).toUpperCase() : "";

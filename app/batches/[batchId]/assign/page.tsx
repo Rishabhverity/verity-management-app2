@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import React, { useState, useEffect } from "react";
+import { useParams } from "@/lib/params-helper";
 import { useSession } from "next-auth/react";
-import { useRouter, useParams } from "next/navigation";
+import { useRouter, useParams as useNextParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 
 // Define types
@@ -34,8 +35,8 @@ interface AssignmentFormData {
 export default function AssignTrainerPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
-  const params = useParams();
-  const batchId = params.batchId as string;
+  const params = useNextParams();
+  const { batchId } = useParams<{ batchId: string }>(params);
 
   // State for trainers, selected batch, form data and loading states
   const [trainers, setTrainers] = useState<Trainer[]>([]);

@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import React, { useState, useEffect } from "react";
+import { useParams } from "@/lib/params-helper";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
@@ -24,13 +25,16 @@ type Batch = {
   trainerId?: string;
 };
 
-export default function TrainerProfilePage({ params }: { params: { trainerId: string } }) {
+export default function TrainerProfilePage({ params }: { params: any }) {
   const { data: session, status } = useSession();
   const router = useRouter();
   const [trainer, setTrainer] = useState<Trainer | null>(null);
   const [assignedBatches, setAssignedBatches] = useState<Batch[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
+
+  // Unwrap params using our helper function
+  const { trainerId } = useParams<{ trainerId: string }>(params);
 
   // Check if user has permission to view trainers
   const userRole = session?.user?.role ? String(session.user.role).toUpperCase() : "";
@@ -56,7 +60,7 @@ export default function TrainerProfilePage({ params }: { params: { trainerId: st
           }
           
           const trainersData = await trainerResponse.json();
-          const foundTrainer = trainersData.find((t: Trainer) => t.id === params.trainerId);
+          const foundTrainer = trainersData.find((t: Trainer) => t.id === trainerId);
           
           if (!foundTrainer) {
             throw new Error("Trainer not found");
@@ -69,7 +73,7 @@ export default function TrainerProfilePage({ params }: { params: { trainerId: st
           if (batchesResponse.ok) {
             const batchesData = await batchesResponse.json();
             const trainerBatches = batchesData.filter(
-              (batch: Batch) => batch.trainerId === params.trainerId
+              (batch: Batch) => batch.trainerId === trainerId
             );
             setAssignedBatches(trainerBatches);
           }
@@ -85,7 +89,7 @@ export default function TrainerProfilePage({ params }: { params: { trainerId: st
     };
 
     fetchTrainerDetails();
-  }, [params.trainerId, status, canViewTrainers]);
+  }, [trainerId, status, canViewTrainers]);
 
   if (status === "loading" || isLoading) {
     return (

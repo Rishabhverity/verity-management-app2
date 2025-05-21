@@ -1,10 +1,12 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { useParams, useRouter } from "next/navigation";
+import React, { useState, useEffect } from "react";
+import { useParams as useNextParams, useRouter } from "next/navigation";
+import { useParams } from "@/lib/params-helper";
 import { useSession } from "next-auth/react";
 import { Button } from "@/components/ui/button";
-import { TrainingType } from "@prisma/client";
+// Define TrainingType enum since it's missing from @prisma/client
+type TrainingType = "ONLINE" | "OFFLINE";
 
 // Define types
 type Batch = {
@@ -27,8 +29,8 @@ type Trainer = {
 };
 
 export default function AssignBatchPage() {
-  const params = useParams();
-  const trainerId = params.trainerId as string;
+  const params = useNextParams();
+  const { trainerId } = useParams<{ trainerId: string }>(params);
   const { data: session, status } = useSession();
   const router = useRouter();
   
